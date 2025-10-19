@@ -18,17 +18,14 @@ export function StarVisualization({
       style={{ background: "black", border: "1px solid #333" }}
     >
       {displayedStars.map((star, i) => {
-        const x = Number(star.x);
-        const y = Number(star.y);
-        const magnitude = star.mag ? Number(star.mag) : 5;
+        const magnitude = star.mag ?? 5;
         const radius = Math.min(5, Math.max(0.5, 5 - magnitude / 5));
-
 
         return (
           <circle
             key={i}
-            cx={x}
-            cy={y}
+            cx={star.x}
+            cy={star.y}
             r={radius}
             fill="white"
             opacity={0.8}

@@ -1,5 +1,5 @@
 export interface Star {
-  x: string;
-  y: string;
-  mag?: string;
+  x: number;
+  y: number;
+  mag?: number;
 }

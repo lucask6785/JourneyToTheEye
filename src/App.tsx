@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { starApi } from "./services/api";
+import Papa from "papaparse";
 import { StarVisualization } from "./components/StarVisualization";
-import { StarStats } from "./components/StarStats";
 import type { Star } from "./types/star.types";
 import "./App.css";
+
+const MAX_STARS = 100;
 
 function App() {
   const [stars, setStars] = useState<Star[]>([]);
@@ -15,13 +16,34 @@ function App() {
       try {
         setLoading(true);
         setError(null);
-        const data = await starApi.getStars();
-        setStars(data);
-        console.log(`Successfully loaded ${data.length} stars from API`);
+        
+        const response = await fetch("/stars.csv");
+        if (!response.ok) {
+          throw new Error(`Failed to fetch stars: ${response.statusText}`);
+        }
+        
+        const csvText = await response.text();
+        
+        Papa.parse(csvText, {
+          header: true,
+          dynamicTyping: true,
+          complete: (results) => {
+            const parsedStars = results.data
+              .filter((row: any) => row.x && row.y)
+              .map((row: any) => ({
+                x: Number(row.x),
+                y: Number(row.y),
+                mag: row.mag ? Number(row.mag) : undefined,
+              }));
+            setStars(parsedStars);
+          },
+          error: (err: Error) => {
+            throw new Error(`Failed to parse CSV: ${err.message}`);
+          },
+        });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Failed to load stars";
         setError(errorMessage);
-        console.error("Error loading stars:", err);
       } finally {
         setLoading(false);
       }
@@ -43,17 +65,24 @@ function App() {
       <div style={{ padding: "20px", textAlign: "center", color: "red" }}>
         <h2>Error</h2>
         <p>{error}</p>
-        <p style={{ fontSize: "0.9em", marginTop: "10px" }}>
-          Make sure the backend server is running on port 5000
-        </p>
       </div>
     );
   }
 
+  const displayedStars = Math.min(MAX_STARS, stars.length);
+
   return (
     <div style={{ padding: "20px" }}>
-      <StarStats totalStars={stars.length} displayedStars={Math.min(100, stars.length)} />
-      <StarVisualization stars={stars} maxStars={100} />
+      <div style={{ marginBottom: "20px" }}>
+        <h2>Star Data Visualization</h2>
+        <p>
+          Total Stars: <strong>{stars.length}</strong>
+        </p>
+        <p>
+          Displayed: <strong>{displayedStars}</strong>
+        </p>
+      </div>
+      <StarVisualization stars={stars} maxStars={MAX_STARS} />
     </div>
   );
 }
