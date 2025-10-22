@@ -1,7 +1,5 @@
 # Journey To The Eye - Star Visualization
 
-A simplified React application that visualizes star data from a CSV file.
-
 ## Project Structure
 
 ```
@@ -36,13 +34,6 @@ npm run dev
 
 This starts the Vite dev server on `http://localhost:5173`
 
-## How It Works
-
-- The star data CSV file is served as a static asset from the `public/` folder
-- PapaParse loads and parses the CSV directly in the browser
-- Stars are rendered as SVG circles with size based on magnitude
-- Displays up to 100 stars for optimal performance
-
 ## Components
 
 ### StarVisualization
@@ -64,7 +55,6 @@ Main component that:
 - **CSV Parsing:** PapaParse
 - **Data Format:** CSV with columns: x, y, mag (magnitude)
 - **Total Stars:** 119,626 stars in the dataset
-- **Displayed:** First 100 stars (configurable via MAX_STARS constant)
 
 ## Building for Production
 
