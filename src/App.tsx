@@ -4,7 +4,7 @@ import { StarVisualization } from "./components/StarVisualization";
 import type { Star } from "./types/star.types";
 import "./App.css";
 
-const MAX_STARS = 100;
+const MAX_STARS = 20000;
 
 function App() {
   const [stars, setStars] = useState<Star[]>([]);

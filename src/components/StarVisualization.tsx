@@ -7,7 +7,7 @@ interface StarVisualizationProps {
 
 export function StarVisualization({ 
   stars, 
-  maxStars = 100 
+  maxStars = 20000 
 }: StarVisualizationProps) {
   const displayedStars = stars.slice(0, maxStars);
 
