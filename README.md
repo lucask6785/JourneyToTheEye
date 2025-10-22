@@ -1,6 +1,6 @@
 # Journey To The Eye - Star Visualization
 
-A web app that visualizes over 100,000 stars from a CSV dataset in an interactive 3D view.
+A web app that visualizes over 100,000 stars from a CSV dataset in an interactive 3D view. Hello
 
 ## Setup
 
