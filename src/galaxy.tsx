@@ -1,180 +1,445 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import "./galaxy.css";
 import { OrbitControls } from 'three-stdlib';
-import getStar from "./helpers/getStar.ts";
-import getStarfield from "./helpers/getStarfield.ts";
 
-// Uhhh will parse from csv later, for testing
-const testStars = [
-  { id: 1, x: 0, y: 0, z: 0, name: "Sol (Sun)", magnitude: -26.74, luminosity: 1, temperature: 5778, color: 0xffff00 },
-  { id: 2, x: 10, y: 5, z: -20, name: "Proxima Centauri", magnitude: 11.13, luminosity: 0.0017, temperature: 3042, color: 0xff6644 },
-  { id: 3, x: -25, y: 15, z: 40, name: "Sirius", magnitude: -1.46, luminosity: 25.4, temperature: 9940, color: 0xaaccff },
-  { id: 4, x: 50, y: -20, z: 30, name: "Betelgeuse", magnitude: 0.5, luminosity: 126000, temperature: 3500, color: 0xff4422 },
-  { id: 5, x: -40, y: 30, z: -50, name: "Vega", magnitude: 0.03, luminosity: 40.12, temperature: 9602, color: 0xccddff },
-  { id: 6, x: 70, y: 10, z: 60, name: "Rigel", magnitude: 0.13, luminosity: 120000, temperature: 11000, color: 0xaabbff },
-  { id: 7, x: -60, y: -40, z: 20, name: "Aldebaran", magnitude: 0.85, luminosity: 518, temperature: 3910, color: 0xff8855 },
-  { id: 8, x: 30, y: 50, z: -70, name: "Spica", magnitude: 1.04, luminosity: 12100, temperature: 22400, color: 0xbbccff },
-  { id: 9, x: -80, y: 20, z: 80, name: "Antares", magnitude: 1.09, luminosity: 57500, temperature: 3570, color: 0xff3311 },
-  { id: 10, x: 45, y: -60, z: -40, name: "Pollux", magnitude: 1.14, luminosity: 43, temperature: 4666, color: 0xffaa66 },
-];
+// Constants
+const BACKEND_URL = 'http://localhost:8000/stars/all';
+const DETAIL_DISTANCE = 50;
+const DETAIL_DISTANCE_SQUARED = DETAIL_DISTANCE * DETAIL_DISTANCE;
+const DRAG_THRESHOLD = 5;
+const LOD_UPDATE_INTERVAL = 60; // frames
+const CAMERA_ANIMATION_DURATION = 1500; // ms
+
+// Types
+interface StarData {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  name?: string;
+  magnitude?: number;
+}
+
+interface BackendResponse {
+  positions: number[][];
+  metadata: Array<{
+    id: number;
+    name: string;
+    magnitude: number;
+  }>;
+  bounds: { min: number[]; max: number[] };
+  count: number;
+}
+
+interface SceneSetup {
+  scene: THREE.Scene;
+  camera: THREE.PerspectiveCamera;
+  renderer: THREE.WebGLRenderer;
+  controls: OrbitControls;
+  raycaster: THREE.Raycaster;
+}
 
 function App() {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const galaxyGroupRef = useRef<THREE.Group | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const galaxyGroupRef = useRef<THREE.Group | null>(null);
+  const [stars, setStars] = useState<StarData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (!canvasRef.current) return;
-
-        const { scene, camera, renderer, controls, pointer, raycaster } = setupScene(canvasRef.current);
-
-        const galaxyGroup = createGalaxy(scene, testStars);
-        galaxyGroupRef.current = galaxyGroup;
-
-        // Animation loop
-        let animationId: number;
-        const animate = (t = 0) => {
-            const time = t * 0.0002;
-            animationId = requestAnimationFrame(animate);
-            
-            galaxyGroup.userData.update(time);
-            
-            controls.update();
-            renderer.render(scene, camera);
-        };
-        animate();
-
-
-        const onMouseClick = (event: MouseEvent) => {
-            if (!galaxyGroupRef.current) return;
-            
-            pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-            pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-            raycaster.setFromCamera(pointer, camera);
-            const intersects = raycaster.intersectObjects(galaxyGroupRef.current.children, false);
-            
-            if (intersects.length > 0) {
-                const star = intersects[0].object;
-                const starData = star.userData.starData;
-                
-                console.log('Clicked star:', starData.name, 'ID:', starData.id);
-                
-                const offset = new THREE.Vector3(10, 5, 10);
-                const targetPosition = new THREE.Vector3()
-                    .copy(star.position)
-                    .add(offset);
-                
-                animateCameraToPosition(camera, controls, targetPosition, star.position);
-            
-            }
-        };
-
-        window.addEventListener('click', onMouseClick);
-
-        const handleResize = () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        };
-        window.addEventListener('resize', handleResize);
-
-        // Cleanup
-        return () => {
-            cancelAnimationFrame(animationId);
-            window.removeEventListener('resize', handleResize);
-            window.removeEventListener('click', onMouseClick);
-            controls.dispose();
-            renderer.dispose();
-        };
-    }, []);
-    
-    return (
-            <canvas ref={canvasRef} id="space" />
-    );
-}
-
-function setupScene(canvas: HTMLCanvasElement) {
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    
-    camera.position.set(0, 20, 100);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    
-    // background stars
-    const starfield = getStarfield({ numStars: 500, size: 0.35 });
-    scene.add(starfield);
-
-    const dirLight = new THREE.DirectionalLight(0x0099ff, 1);
-    dirLight.position.set(0, 1, 0);
-    scene.add(dirLight);
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.minDistance = 1;
-    controls.maxDistance = 500;
-
-    const pointer = new THREE.Vector2();
-    const raycaster = new THREE.Raycaster();
-
-  return { scene, camera, renderer, controls, pointer, raycaster };
-
-}
-
-function createGalaxy(scene: THREE.Scene, starData: typeof testStars) {
-    const galaxyGroup = new THREE.Group();
-    galaxyGroup.userData.update = (t: number) => {
-        galaxyGroup.children.forEach((child) => { // update all stars in the scene w animations
-            child.userData.update?.(t);
-        });
-    };
-
-    starData.forEach(star => {
-        //const baseSize = Math.pow(star.luminosity, 0.25) * 0.3; // random ah formula to make sizes based on luminosity
-        //const size = Math.max(0.5, Math.min(baseSize, 5));
+  // Fetch stars from backend
+  useEffect(() => {
+    const fetchStars = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(BACKEND_URL);
         
-        const starObject = getStar();
-
-        starObject.position.set(star.x, star.y, star.z);
-       
-        starObject.userData.starData = star;
-        starObject.userData.type = 'star'
-
-        galaxyGroup.add(starObject);
-    })
-    scene.add(galaxyGroup);
-    return galaxyGroup;
-}
-
-function animateCameraToPosition(camera: THREE.PerspectiveCamera, controls: OrbitControls, targetPosition: THREE.Vector3, lookAtPosition: THREE.Vector3) {
-    const startPosition = camera.position.clone();
-    const startTarget = controls.target.clone();
-    const duration = 1500; // 1.5 seconds
-    const startTime = Date.now();
-    
-    const animateCamera = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        // Ease-in-out function
-        const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-        
-        // Interpolate camera position
-        camera.position.lerpVectors(startPosition, targetPosition, eased);
-        
-        // Interpolate controls target (what camera looks at)
-        controls.target.lerpVectors(startTarget, lookAtPosition, eased);
-        
-        if (progress < 1) {
-            requestAnimationFrame(animateCamera);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
+        
+        const data: BackendResponse = await response.json();
+        
+        const transformedStars: StarData[] = data.positions.map((pos, index) => ({
+          id: data.metadata[index]?.id ?? index,
+          x: pos[0],
+          y: pos[1],
+          z: pos[2],
+          name: data.metadata[index]?.name ?? `Star-${index}`,
+          magnitude: data.metadata[index]?.magnitude ?? 0,
+        }));
+        
+        setStars(transformedStars);
+        console.log(`Loaded ${transformedStars.length} stars from backend`);
+      } catch (err) {
+        console.error('Error fetching stars:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load stars');
+      } finally {
+        setLoading(false);
+      }
     };
+
+    fetchStars();
+  }, []);
+
+  // Three.js setup and animation
+  useEffect(() => {
+    if (!canvasRef.current || stars.length === 0) return;
+
+    const { scene, camera, renderer, controls, raycaster } = setupScene(canvasRef.current);
+    const galaxyGroup = createGalaxy(scene, stars, camera);
+    galaxyGroupRef.current = galaxyGroup;
+
+    // Animation loop
+    let animationId: number;
+    let frameCount = 0;
     
-    animateCamera();
+    const animate = () => {
+      animationId = requestAnimationFrame(animate);
+      
+      if (frameCount % LOD_UPDATE_INTERVAL === 0) {
+        galaxyGroup.userData.updateLOD(camera);
+      }
+      frameCount++;
+      
+      controls.update();
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    // Click detection
+    const mouseDownPos = { x: 0, y: 0 };
+    
+    const handleMouseDown = (event: MouseEvent) => {
+      mouseDownPos.x = event.clientX;
+      mouseDownPos.y = event.clientY;
+    };
+
+    const handleMouseUp = (event: MouseEvent) => {
+      const dx = event.clientX - mouseDownPos.x;
+      const dy = event.clientY - mouseDownPos.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance < DRAG_THRESHOLD) {
+        handleStarClick(event, camera, controls, raycaster);
+      }
+    };
+
+    const handleResize = () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    };
+
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      cancelAnimationFrame(animationId);
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('resize', handleResize);
+      controls.dispose();
+      renderer.dispose();
+    };
+  }, [stars]);
+
+  const handleStarClick = (
+    event: MouseEvent,
+    camera: THREE.PerspectiveCamera,
+    controls: OrbitControls,
+    raycaster: THREE.Raycaster
+  ) => {
+    if (!galaxyGroupRef.current) return;
+
+    const pointer = new THREE.Vector2(
+      (event.clientX / window.innerWidth) * 2 - 1,
+      -(event.clientY / window.innerHeight) * 2 + 1
+    );
+
+    raycaster.setFromCamera(pointer, camera);
+    raycaster.params.Points!.threshold = 1.0;
+    
+    const intersects = raycaster.intersectObjects(galaxyGroupRef.current.children, true);
+    
+    if (intersects.length > 0) {
+      const starData = getStarDataFromIntersection(intersects[0]);
+      
+      if (starData) {
+        console.log('Clicked star:', starData.name, 'ID:', starData.id);
+        
+        const targetPosition = new THREE.Vector3(starData.x, starData.y, starData.z)
+          .add(new THREE.Vector3(10, 5, 10));
+        const lookAtPosition = new THREE.Vector3(starData.x, starData.y, starData.z);
+        
+        animateCameraToPosition(camera, controls, targetPosition, lookAtPosition);
+      }
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={styles.centerContainer}>
+        <div>Loading stars from backend...</div>
+        <div style={styles.subtext}>This may take a moment...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ ...styles.centerContainer, color: 'red' }}>
+        <div>Error loading stars:</div>
+        <div>{error}</div>
+        <div style={styles.subtext}>
+          Make sure backend is running: uvicorn api:app --reload
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <canvas ref={canvasRef} id="space" />
+      <div style={styles.infoBox}>
+        Stars loaded: {stars.length.toLocaleString()}
+      </div>
+    </>
+  );
 }
+
+// Helper: Extract star data from raycaster intersection
+function getStarDataFromIntersection(intersection: THREE.Intersection): StarData | null {
+  // Check if it's a point cloud
+  if (intersection.index !== undefined && intersection.object instanceof THREE.Points) {
+    const allStars = intersection.object.userData.starData as StarData[];
+    return allStars[intersection.index];
+  }
+  
+  // Check if it's a detailed star
+  let obj: THREE.Object3D | null = intersection.object;
+  while (obj && !obj.userData.starData) {
+    obj = obj.parent;
+  }
+  return obj?.userData.starData ?? null;
+}
+
+// Scene setup
+function setupScene(canvas: HTMLCanvasElement): SceneSetup {
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  
+  camera.position.set(0, 20, 100);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  
+  // Lighting
+  const dirLight = new THREE.DirectionalLight(0x0099ff, 1);
+  dirLight.position.set(0, 1, 0);
+  scene.add(dirLight);
+
+  // Controls
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.minDistance = 1;
+  controls.maxDistance = 500;
+
+  const raycaster = new THREE.Raycaster();
+
+  return { scene, camera, renderer, controls, raycaster };
+}
+
+// Create detailed star mesh
+function createDetailedStar(): THREE.Group {
+  const group = new THREE.Group();
+  
+  const geometry = new THREE.SphereGeometry(0.5, 16, 16);
+  const material = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+  const star = new THREE.Mesh(geometry, material);
+  group.add(star);
+  
+  const glowGeometry = new THREE.SphereGeometry(0.7, 16, 16);
+  const glowMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffff00,
+    transparent: true,
+    opacity: 0.3
+  });
+  const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+  group.add(glow);
+  
+  return group;
+}
+
+// Create galaxy with LOD system
+function createGalaxy(scene: THREE.Scene, starData: StarData[], camera: THREE.Camera): THREE.Group {
+  const galaxyGroup = new THREE.Group();
+  
+  console.log('Creating galaxy with point cloud...');
+  const startTime = performance.now();
+  
+  // Create point cloud for all stars
+  const positions = new Float32Array(starData.length * 3);
+  starData.forEach((star, i) => {
+    positions[i * 3] = star.x;
+    positions[i * 3 + 1] = star.y;
+    positions[i * 3 + 2] = star.z;
+  });
+  
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  
+  const material = new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: 0.8,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.8
+  });
+  
+  const pointCloud = new THREE.Points(geometry, material);
+  pointCloud.userData.starData = starData;
+  pointCloud.name = 'pointCloud';
+  galaxyGroup.add(pointCloud);
+  
+  console.log(`Created ${starData.length} stars in ${(performance.now() - startTime).toFixed(2)}ms`);
+  
+  // Group for detailed stars
+  const detailedStarsGroup = new THREE.Group();
+  detailedStarsGroup.name = 'detailedStars';
+  galaxyGroup.add(detailedStarsGroup);
+  
+  // LOD tracking
+  const detailedStarMap = new Map<number, THREE.Object3D>();
+  const originalPositions = new Float32Array(positions);
+  
+  // LOD update function
+  galaxyGroup.userData.updateLOD = (camera: THREE.Camera) => {
+    const cameraPos = camera.position;
+    const shouldBeDetailed = new Set<number>();
+    
+    // Find stars within detail distance
+    starData.forEach((star, index) => {
+      const dx = star.x - cameraPos.x;
+      const dy = star.y - cameraPos.y;
+      const dz = star.z - cameraPos.z;
+      const distanceSquared = dx * dx + dy * dy + dz * dz;
+      
+      if (distanceSquared < DETAIL_DISTANCE_SQUARED) {
+        shouldBeDetailed.add(index);
+      }
+    });
+    
+    // Remove far detailed stars
+    detailedStarMap.forEach((starObj, index) => {
+      if (!shouldBeDetailed.has(index)) {
+        detailedStarsGroup.remove(starObj);
+        detailedStarMap.delete(index);
+        
+        // Restore point
+        positions[index * 3] = originalPositions[index * 3];
+        positions[index * 3 + 1] = originalPositions[index * 3 + 1];
+        positions[index * 3 + 2] = originalPositions[index * 3 + 2];
+      }
+    });
+    
+    // Add close detailed stars
+    shouldBeDetailed.forEach(index => {
+      if (!detailedStarMap.has(index)) {
+        const star = starData[index];
+        const detailedStar = createDetailedStar();
+        detailedStar.position.set(star.x, star.y, star.z);
+        detailedStar.userData.starData = star;
+        
+        detailedStarsGroup.add(detailedStar);
+        detailedStarMap.set(index, detailedStar);
+        
+        // Hide point by moving far away
+        positions[index * 3] = 10000;
+        positions[index * 3 + 1] = 10000;
+        positions[index * 3 + 2] = 10000;
+      }
+    });
+    
+    // Update geometry if needed
+    if (shouldBeDetailed.size > 0 || detailedStarMap.size > shouldBeDetailed.size) {
+      geometry.attributes.position.needsUpdate = true;
+    }
+  };
+  
+  // Initial LOD update
+  galaxyGroup.userData.updateLOD(camera);
+  
+  scene.add(galaxyGroup);
+  return galaxyGroup;
+}
+
+// Camera animation
+function animateCameraToPosition(
+  camera: THREE.PerspectiveCamera,
+  controls: OrbitControls,
+  targetPosition: THREE.Vector3,
+  lookAtPosition: THREE.Vector3
+) {
+  const startPosition = camera.position.clone();
+  const startTarget = controls.target.clone();
+  const startTime = Date.now();
+  
+  const animate = () => {
+    const elapsed = Date.now() - startTime;
+    const progress = Math.min(elapsed / CAMERA_ANIMATION_DURATION, 1);
+    
+    // Ease-in-out
+    const eased = progress < 0.5
+      ? 2 * progress * progress
+      : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+    
+    camera.position.lerpVectors(startPosition, targetPosition, eased);
+    controls.target.lerpVectors(startTarget, lookAtPosition, eased);
+    
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    }
+  };
+  
+  animate();
+}
+
+// Styles
+const styles = {
+  centerContainer: {
+    position: 'absolute' as const,
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    color: 'white',
+    fontSize: '24px',
+    fontFamily: 'Arial, sans-serif',
+    textAlign: 'center' as const
+  },
+  subtext: {
+    fontSize: '14px',
+    marginTop: '10px',
+    color: '#888'
+  },
+  infoBox: {
+    position: 'absolute' as const,
+    top: '10px',
+    left: '10px',
+    color: 'white',
+    fontFamily: 'Arial, sans-serif',
+    fontSize: '14px',
+    background: 'rgba(0,0,0,0.7)',
+    padding: '10px',
+    borderRadius: '5px'
+  }
+};
 
 export default App;
