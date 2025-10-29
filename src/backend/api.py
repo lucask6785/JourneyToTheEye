@@ -47,7 +47,7 @@ async def startup_event():
     print(f"Loaded {len(STAR_NODES)} stars")
 
 @app.get("/djikstra")
-async def djikstra_call(fuel: float, start: int, end: int):
+async def djikstra_call(fuel, start, end):
     graph = build_graph(STAR_NODES, fuel)
     sequence, distance = djikstras(STAR_NODES, graph, start, end)
     return {
