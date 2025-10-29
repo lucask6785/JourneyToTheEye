@@ -1,0 +1,44 @@
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+#space {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+
+.center-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 24px;
+  font-family: Arial, sans-serif;
+  text-align: center;
+}
+
+.center-container.error {
+  color: #ff4444;
+}
+
+.subtext {
+  font-size: 14px;
+  margin-top: 10px;
+  color: #888;
+}
+
+.info-box {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  color: white;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 10px;
+  border-radius: 5px;
+}
