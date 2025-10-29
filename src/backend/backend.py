@@ -146,11 +146,7 @@ def djikstras(nodes, graph, startStar, goalStar):
 
     return (sequence, dist[goalStar])
 
-
-       
-
-
-nodes = load_stars("public/stars.csv")
+nodes = load_stars("../../public/stars.csv")
 graph = build_graph(nodes, 30)
 sequence, dist = djikstras(nodes, graph, 0, 1)
 print(dist, sequence)
