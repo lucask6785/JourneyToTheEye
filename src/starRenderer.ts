@@ -1,4 +1,4 @@
-// starRenderer.ts - Three.js rendering logic with Level-of-Detail (LOD) system
+// starRenderer.ts
 
 import * as THREE from 'three';
 import { CONFIG } from './constants';
@@ -51,10 +51,10 @@ export function createGalaxy(
   detailedStarsGroup.name = 'detailedStars'; // for debugging
   galaxyGroup.add(detailedStarsGroup);
 
-  const detailedStarMap = new Map<number, THREE.Group>(); // Maps star index -> Three.js mesh group
-  const starIndexMap = new Map<number, number>();         // Maps star ID -> array index for quick lookup
-  let selectedStarId: number | null = null;               // Currently selected star (for highlighting)
-  
+  const detailedStarMap = new Map<number, THREE.Group>(); 
+  const starIndexMap = new Map<number, number>();
+  let selectedStarId: number | null = null;
+
   // Build the star ID
   starData.forEach((star, index) => {
     starIndexMap.set(star.id, index);
@@ -142,78 +142,60 @@ export function createGalaxy(
         detailedStarMap.set(index, detailedStar);
         
         // Hide the corresponding point in the point cloud
-        // Move it far away (off-screen) instead of removing it (more efficient)
-        positions[index * 3] = 10000;     // x - far away
-        positions[index * 3 + 1] = 10000; // y - far away
-        positions[index * 3 + 2] = 10000; // z - far away
+        // Move it far away instead of removing it
+        positions[index * 3] = 10000;
+        positions[index * 3 + 1] = 10000; // could change
+        positions[index * 3 + 2] = 10000;
         
         addedCount++;
       }
     });
 
     // Update point cloud geometry if any changes were made
-    // This tells Three.js to re-upload the position data to the GPU
     if (addedCount > 0 || removedCount > 0) {
       pointCloud.geometry.attributes.position.needsUpdate = true; // Flag for GPU update
       console.log(`LOD update: +${addedCount} -${removedCount} stars, total detailed: ${detailedStarMap.size}`);
     }
   };
 
-  /**
-   * Select and highlight a specific star.
-   * Changes the star's color to indicate selection and forces it to be rendered in detail.
-   * 
-   * @param starId - The ID of the star to select
-   */
+  // Select and highlight a specific star.
   const selectStar = (starId: number) => {
-    // Deselect previous star if one was selected
     if (selectedStarId !== null) {
       const prevIndex = starIndexMap.get(selectedStarId);
       if (prevIndex !== undefined) {
         const prevStarMesh = detailedStarMap.get(prevIndex);
         if (prevStarMesh) {
-          setStarColor(prevStarMesh, 0xffff00); // Restore to yellow (default star color)
+          setStarColor(prevStarMesh, 0xffff00);
         }
       }
     }
     
-    // Update the selected star ID
     selectedStarId = starId;
     
     // Force immediate LOD update to ensure selected star is rendered as detailed mesh
-    // This is necessary because the selected star might be outside the normal detail range
     updateLOD(camera);
     
-    // Now highlight the newly selected star with a different color
     const newIndex = starIndexMap.get(starId);
     if (newIndex !== undefined) {
       const newStarMesh = detailedStarMap.get(newIndex);
       if (newStarMesh) {
-        setStarColor(newStarMesh, 0x00ff88); // Light green/cyan for selection highlight
+        setStarColor(newStarMesh, 0x00ff88);
       } else {
         console.warn('Selected star not in detailed map after LOD update:', starId);
       }
     }
   };
 
-  // Log creation performance
-  console.log(
-    `Galaxy created in ${(performance.now() - startTime).toFixed(2)}ms with ${starData.length} stars`
-  );
+  console.log(`Galaxy created in ${(performance.now() - startTime).toFixed(2)}ms with ${starData.length} stars`);
 
-  // Add the galaxy group to the scene
   scene.add(galaxyGroup);
-
-  // Perform initial LOD update to render stars near starting camera position
-  // IMPORTANT: Do this AFTER adding to scene, or Three.js might not render properly
   updateLOD(camera);
 
-  // Return the LOD system interface for the caller to use
   return {
-    group: galaxyGroup,                // Access to the Three.js group
-    updateLOD,                        // Function to update LOD
-    selectStar,                       // Function to select/highlight stars
-    cleanup: () => {                  // Cleanup function to free GPU resources
+    group: galaxyGroup,
+    updateLOD,
+    selectStar,
+    cleanup: () => {
       // Dispose of point cloud resources
       pointCloud.geometry.dispose();
       (pointCloud.material as THREE.Material).dispose();
@@ -222,142 +204,93 @@ export function createGalaxy(
       detailedStarMap.forEach(starMesh => {
         starMesh.children.forEach(child => {
           if (child instanceof THREE.Mesh) {
-            child.geometry.dispose();          // Free geometry buffers
-            (child.material as THREE.Material).dispose(); // Free material resources
+            child.geometry.dispose();
+            (child.material as THREE.Material).dispose();
           }
         });
       });
     },
-    getDetailedStarCount: () => detailedStarMap.size, // Get current detailed star count
+    getDetailedStarCount: () => detailedStarMap.size,
   };
 }
 
-/**
- * Create a point cloud containing all stars.
- * Point clouds are extremely efficient - all points rendered in a single draw call.
- * 
- * How it works:
- * - All star positions stored in a single Float32Array (flat array: [x1,y1,z1, x2,y2,z2, ...])
- * - GPU renders all points in one operation
- * - Individual points can be "hidden" by moving them off-screen
- * 
- * @param starData - Array of star data with positions
- * @returns Object containing the point cloud, mutable positions array, and original positions backup
- */
+// Create a point cloud containing all stars.
 function createPointCloud(starData: StarData[]) {
-  // Create a flat array of positions: [x1, y1, z1, x2, y2, z2, ...]
-  // Float32Array is more memory-efficient and faster for GPU than regular arrays
-  const positions = new Float32Array(starData.length * 3);
+  const positions = new Float32Array(starData.length * 3); // Float32Array is more memory-efficient and faster for GPU than regular arrays
   
-  // Fill the positions array with star coordinates
   starData.forEach((star, i) => {
     positions[i * 3] = star.x;       // x coordinate at index i*3
     positions[i * 3 + 1] = star.y;   // y coordinate at index i*3+1
     positions[i * 3 + 2] = star.z;   // z coordinate at index i*3+2
   });
 
-  // Create Three.js geometry and attach positions as an attribute
   const geometry = new THREE.BufferGeometry();
-  // BufferAttribute tells Three.js how to interpret the positions array:
-  // - positions: the data array
-  // - 3: each vertex has 3 components (x, y, z)
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
   // Create material for point rendering
   const material = new THREE.PointsMaterial({
-    color: 0xffffff,                    // White color
-    size: CONFIG.POINT_SIZE,            // Size of each point in Three.js units
-    sizeAttenuation: true,              // Points get smaller with distance (perspective)
-    transparent: true,                  // Enable transparency
-    opacity: CONFIG.POINT_OPACITY,      // Opacity value (0-1)
+    color: 0xffffff,
+    size: CONFIG.POINT_SIZE,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: CONFIG.POINT_OPACITY, 
   });
 
   // Create the point cloud object
   const pointCloud = new THREE.Points(geometry, material);
   pointCloud.userData.starData = starData; // Store reference to star data for raycasting
-  pointCloud.name = 'pointCloud'; // Name for debugging
+  pointCloud.name = 'pointCloud';
 
   // Keep a copy of original positions for restoring points when they return to point cloud
-  // This is necessary because we modify 'positions' array to hide/show points
   const originalPositions = new Float32Array(positions);
 
   return { pointCloud, positions, originalPositions };
 }
 
-/**
- * Create a detailed star mesh with a core sphere and glow effect.
- * This is used for stars that are close to the camera.
- * 
- * Structure:
- * Group
- * ├── Star Core (solid yellow sphere)
- * └── Glow (larger transparent sphere)
- * 
- * @returns Three.js Group containing the star core and glow meshes
- */
+// Create a detailed star mesh with a core sphere and glow effect.
 function createDetailedStar(): THREE.Group {
-  // Create a group to hold both the core and glow
   const group = new THREE.Group();
   
-  // Create the star core - solid sphere
+  // Star Core
   const geometry = new THREE.SphereGeometry(
-    CONFIG.DETAILED_STAR_SIZE,        // Radius of the sphere
-    CONFIG.DETAILED_STAR_SEGMENTS,    // Width segments (higher = smoother but more polygons)
-    CONFIG.DETAILED_STAR_SEGMENTS     // Height segments
+    CONFIG.DETAILED_STAR_SIZE,
+    CONFIG.DETAILED_STAR_SEGMENTS,
+    CONFIG.DETAILED_STAR_SEGMENTS
   );
-  // MeshBasicMaterial: unaffected by lights, always same brightness (good for glowing objects)
+
   const material = new THREE.MeshBasicMaterial({ color: 0xffff00 }); // Yellow
   const star = new THREE.Mesh(geometry, material);
-  star.name = 'starCore'; // Name for debugging/identification
+  star.name = 'starCore';
   group.add(star);
   
-  // Create the glow effect - larger transparent sphere around the core
+  // Glow Effect
   const glowGeometry = new THREE.SphereGeometry(
-    CONFIG.GLOW_SIZE,                 // Larger than core to create halo effect
+    CONFIG.GLOW_SIZE,
     CONFIG.DETAILED_STAR_SEGMENTS,
     CONFIG.DETAILED_STAR_SEGMENTS
   );
   const glowMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffff00,                  // Same yellow color as core
-    transparent: true,                // Enable transparency
-    opacity: CONFIG.GLOW_OPACITY      // Semi-transparent for soft glow
+    color: 0xffff00,
+    transparent: true,
+    opacity: CONFIG.GLOW_OPACITY
   });
   const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-  glow.name = 'starGlow'; // Name for debugging/identification
+  glow.name = 'starGlow';
   group.add(glow);
   
-  return group; // Return group containing both meshes
+  return group;
 }
 
-/**
- * Set the color of a star mesh (both core and glow).
- * Updates the material color for all child meshes in the star group.
- * 
- * @param starGroup - The Three.js group containing star meshes
- * @param color - Hex color value (e.g., 0xffff00 for yellow)
- */
+// Set the color of a star mesh (both core and glow)
 function setStarColor(starGroup: THREE.Group, color: number) {
-  // Iterate through all children in the group (core and glow)
   starGroup.children.forEach(child => {
     if (child instanceof THREE.Mesh) {
-      // Update the material color using setHex() for efficiency
       (child.material as THREE.MeshBasicMaterial).color.setHex(color);
     }
   });
 }
 
-/**
- * Helper to extract star data from a raycaster intersection.
- * Handles both point cloud clicks and detailed star mesh clicks.
- * 
- * When clicking:
- * - Point cloud: intersection.index gives us the star index directly
- * - Detailed star: need to traverse up parent chain to find userData
- * 
- * @param intersection - Three.js raycaster intersection object
- * @param allStars - Array of all star data for lookup
- * @returns StarData object if found, null otherwise
- */
+// Helper to extract star data from a raycaster intersection
 export function getStarDataFromIntersection(
   intersection: THREE.Intersection,
   allStars: StarData[]
@@ -369,13 +302,9 @@ export function getStarDataFromIntersection(
   }
   
   // Check if it's a detailed star mesh
-  // Detailed stars store their data in userData, but the intersection might be
-  // with a child mesh (core or glow), so traverse up the parent chain
   let obj: THREE.Object3D | null = intersection.object;
   while (obj && !obj.userData.starData) {
-    obj = obj.parent; // Move up the hierarchy
+    obj = obj.parent;
   }
-  
-  // Return the star data if found, null otherwise
   return obj?.userData.starData ?? null;
 }

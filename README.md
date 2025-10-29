@@ -4,23 +4,6 @@ An interactive 3D web application that visualizes over 100,000 stars from a CSV 
 
 **Inspired by the game Outer Wilds** | Built for COP3530 Project 2
 
-## 🌟 Features
-
-- **Interactive 3D visualization** of 100,000+ stars
-- **Level of Detail (LOD) rendering** for optimal performance
-- **Click-to-zoom** on individual stars
-- **Smooth camera controls** with orbit navigation
-- **Backend k-d tree** for efficient spatial queries
-- **Real-time performance metrics**
-
-## 🏗️ Architecture
-
-This project uses a client-server architecture:
-
-- **Frontend (React + Three.js)**: Renders stars using WebGL with LOD optimization
-- **Backend (FastAPI + Python)**: Loads star data, builds k-d trees, and provides spatial query APIs
-- **Data**: 100,000+ stars stored in `public/stars.csv` with position and metadata
-
 ## 🚀 Setup
 
 ### Prerequisites

@@ -48,22 +48,19 @@ function App() {
   useEffect(() => {
     const fetchStars = async () => {
       try {
-        setLoading(true); // Show loading UI
+        setLoading(true);
         
         // Fetch data from backend API endpoint
         const response = await fetch(CONFIG.BACKEND_URL);
         
-        // Check if HTTP request was successful (status 200-299)
+        // Check if HTTP request was successful
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        // Parse JSON response body
         const data: BackendResponse = await response.json();
         
         // Transform backend format to StarData format
-        // Backend sends positions and metadata separately for efficiency
-        // We combine them here into objects for easier frontend use
         const transformedStars: StarData[] = data.positions.map((pos, index) => ({
           id: data.metadata[index].id,           // Star ID
           x: pos[0],                             // X coordinate
@@ -77,109 +74,80 @@ function App() {
         setStars(transformedStars);
         console.log(`Loaded ${transformedStars.length} stars from backend`);
       } catch (err) {
-        // Handle any errors during fetch or parsing
         console.error('Error fetching stars:', err);
         setError(err instanceof Error ? err.message : 'Failed to load stars');
       } finally {
-        // Always hide loading UI, whether success or error
         setLoading(false);
       }
     };
 
-    fetchStars(); // Execute the async function
-  }, []); // Empty deps = run once on mount
+    fetchStars();
+  }, []);
 
-  // Effect hook: Set up Three.js scene and animation loop
+  // Effect hook - Set up Three.js scene and animation loop
   // Runs when stars data changes (after fetch completes)
   useEffect(() => {
-    // Don't run if canvas ref isn't ready or no stars loaded yet
     if (!canvasRef.current || stars.length === 0) return;
 
-    // Initialize Three.js scene with camera, renderer, controls
     const { scene, camera, renderer, controls, raycaster } = setupScene(canvasRef.current);
     
     // Create the galaxy visualization with LOD system
     const lodSystem = createGalaxy(scene, stars, camera);
-    lodSystemRef.current = lodSystem; // Store ref for access in event handlers
+    lodSystemRef.current = lodSystem;
 
     // Animation loop variables
-    let animationId: number;     // ID from requestAnimationFrame for cleanup
-    let lastLODUpdate = 0;        // Timestamp of last LOD update (for throttling)
+    let animationId: number;
+    let lastLODUpdate = 0;
     
-    /**
-     * Main animation loop - called every frame (~60 FPS)
-     * Handles LOD updates and rendering
-     * 
-     * @param time - High-resolution timestamp from requestAnimationFrame
-     */
     const animate = (time: number) => {
-      // Schedule next frame - this creates the loop
+      // Schedule next frame
       animationId = requestAnimationFrame(animate);
       
       // Update LOD based on time instead of frame count
-      // This throttles LOD updates to CONFIG.LOD_UPDATE_INTERVAL (100ms)
-      // LOD updates are expensive (O(n) distance checks), so we don't do them every frame
       if (time - lastLODUpdate > CONFIG.LOD_UPDATE_INTERVAL) {
-        lodSystem.updateLOD(camera);                      // Recalculate which stars should be detailed
+        lodSystem.updateLOD(camera);
         setDetailedCount(lodSystem.getDetailedStarCount()); // Update UI counter
-        lastLODUpdate = time;                             // Record update time
+        lastLODUpdate = time;
       }
       
-      // Update camera controls (handles damping/inertia)
+      // Update camera controls
       controls.update();
       
       // Render the scene from camera perspective
       renderer.render(scene, camera);
     };
-    animate(0); // Start the animation loop
+    animate(0);
 
-    // Mouse interaction: Click detection with drag prevention
-    // We need to distinguish between clicks (select star) and drags (rotate view)
-    const mouseDownPos = { x: 0, y: 0 }; // Store mouse position on mousedown
+    // Mouse interaction
+    const mouseDownPos = { x: 0, y: 0 };
     
-    /**
-     * Record mouse position when user presses mouse button
-     * This allows us to detect if they dragged or just clicked
-     */
     const handleMouseDown = (event: MouseEvent) => {
       mouseDownPos.x = event.clientX;
       mouseDownPos.y = event.clientY;
     };
 
-    /**
-     * Handle mouse button release - check if it was a click or drag
-     * If mouse didn't move much, treat as click and select star
-     */
     const handleMouseUp = (event: MouseEvent) => {
       // Calculate distance mouse moved between down and up
       const dx = event.clientX - mouseDownPos.x;
       const dy = event.clientY - mouseDownPos.y;
-      const distance = Math.sqrt(dx * dx + dy * dy); // Euclidean distance in pixels
+      const distance = Math.sqrt(dx * dx + dy * dy);
       
-      // Only trigger star selection if mouse didn't move much (not a drag)
-      // DRAG_THRESHOLD prevents accidental selection when user is rotating view
+      // Only trigger star selection if mouse didn't move much
       if (distance < CONFIG.DRAG_THRESHOLD) {
-        // Convert mouse coordinates to normalized device coordinates (NDC)
-        // NDC: x and y range from -1 to +1, (0,0) is center of screen
-        const pointer = new THREE.Vector2(
-          (event.clientX / window.innerWidth) * 2 - 1,   // Map [0, width] to [-1, 1]
-          -(event.clientY / window.innerHeight) * 2 + 1  // Map [0, height] to [1, -1] (y inverted)
-        );
+        const pointer = new THREE.Vector2((event.clientX / window.innerWidth) * 2 - 1, -(event.clientY / window.innerHeight) * 2 + 1);
 
-        // Set up raycaster to shoot ray from camera through mouse position
+        // Set up raycaster
         raycaster.setFromCamera(pointer, camera);
         
-        // Set threshold for point detection - how close ray must be to point to register hit
+        // Set threshold for point detection
         raycaster.params.Points!.threshold = CONFIG.RAYCASTER_THRESHOLD;
         
         // Cast ray and find intersections with star objects
-        // 'true' parameter means recursively check children (point cloud + detailed stars)
         const intersects = raycaster.intersectObjects(lodSystem.group.children, true);
         
         // Check if we hit any stars
         if (intersects.length > 0) {
           // Get the star data from the intersection
-          // Handles both point cloud and detailed mesh intersections
           const starData = getStarDataFromIntersection(intersects[0], stars);
           
           if (starData) {
@@ -188,63 +156,51 @@ function App() {
             // Highlight the selected star (changes color to green)
             lodSystem.selectStar(starData.id);
             
-            // Calculate camera target position: position camera near the star
-            // Direction: vector from star to current camera position (normalized)
             const direction = camera.position.clone()
                 .sub(new THREE.Vector3(starData.x, starData.y, starData.z))
                 .normalize(); // Make it unit length (length = 1)
-            
-            // Target position: star position + direction * distance
-            // This places camera at specified distance from star, looking at it
+        
             const targetPosition = new THREE.Vector3(starData.x, starData.y, starData.z)
                 .add(direction.multiplyScalar(CONFIG.CAMERA_ZOOM_DISTANCE));
             
-            // Look-at position: the star itself (camera will point here)
             const lookAtPosition = new THREE.Vector3(starData.x, starData.y, starData.z);
             
-            // Smoothly animate camera to new position
             animateCameraToPosition(camera, controls, targetPosition, lookAtPosition);
           }
         }
       }
     };
 
-    /**
-     * Handle window resize - update camera and renderer to match new size
-     * This prevents distortion when window size changes
-     */
+    // Handle window resize
     const handleResize = () => {
       // Update camera aspect ratio to match new window dimensions
       camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix(); // Recalculate projection matrix with new aspect
+      camera.updateProjectionMatrix();
       
       // Resize renderer to match window
       renderer.setSize(window.innerWidth, window.innerHeight);
       
       // Limit pixel ratio to avoid excessive GPU load on high-DPI displays
-      // min(devicePixelRatio, 2) means use native DPI but max out at 2x
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     };
 
-    // Register event listeners
     window.addEventListener('mousedown', handleMouseDown);
     window.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('resize', handleResize);
 
-    // Cleanup function - called when component unmounts or stars change
-    // This prevents memory leaks and stops animation loop
+    // Cleanup
     return () => {
-      cancelAnimationFrame(animationId);                // Stop animation loop
+      cancelAnimationFrame(animationId); // Stop animation loop
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('resize', handleResize);
-      controls.dispose();                               // Cleanup controls
-      renderer.dispose();                               // Free GPU resources
-      lodSystem.cleanup();                              // Cleanup star meshes and geometries
+      controls.dispose(); // Cleanup controls
+      renderer.dispose(); // Free GPU resources
+      lodSystem.cleanup(); // Cleanup star meshes and geometries
     };
-  }, [stars]); // Re-run when stars data changes
+  }, [stars]);
 
-  // Conditional rendering: Show loading state while fetching data
+  // Show loading state while fetching data
   if (loading) {
     return (
       <div className="center-container">
@@ -254,7 +210,7 @@ function App() {
     );
   }
 
-  // Conditional rendering: Show error state if fetch failed
+  // Show error state if fetch failed
   if (error) {
     return (
       <div className="center-container error">
@@ -267,7 +223,7 @@ function App() {
     );
   }
 
-  // Main render: Canvas for Three.js + UI overlay with stats
+  // Canvas for Three.js + UI overlay with stats
   return (
     <>
       <canvas ref={canvasRef} id="space" />
@@ -279,18 +235,10 @@ function App() {
   );
 }
 
-/**
- * Set up the Three.js scene with camera, renderer, lights, and controls
- * This is called once when the component mounts with star data
- * 
- * @param canvas - HTMLCanvasElement to render into
- * @returns Object containing all scene components
- */
+// Set up the Three.js scene with camera, renderer, lights, and controls
 function setupScene(canvas: HTMLCanvasElement): SceneSetup {
-  // Create the scene - container for all 3D objects
   const scene = new THREE.Scene();
   
-  // Create perspective camera (simulates human eye perspective)
   const camera = new THREE.PerspectiveCamera(
     CONFIG.CAMERA_FOV,                            // Field of view in degrees
     window.innerWidth / window.innerHeight,       // Aspect ratio
@@ -298,110 +246,72 @@ function setupScene(canvas: HTMLCanvasElement): SceneSetup {
     CONFIG.CAMERA_FAR                             // Far clipping plane
   );
   
-  // Create WebGL renderer with antialiasing for smoother edges
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   
-  // Position camera at starting location
   camera.position.set(
     CONFIG.CAMERA_START_POSITION.x,
     CONFIG.CAMERA_START_POSITION.y,
     CONFIG.CAMERA_START_POSITION.z
   );
   
-  // Set renderer size to fill window
   renderer.setSize(window.innerWidth, window.innerHeight);
-  
-  // Set pixel ratio for high-DPI displays (but cap at 2x for performance)
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   
-  // Add ambient light - provides base illumination from all directions
-  // Low intensity (0.5) creates subtle lighting without washing out stars
+  // Ambient light
   const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
   scene.add(ambientLight);
   
-  // Add directional light - simulates distant light source (like sun)
-  // Blue tint (0x0099ff) gives a cool space atmosphere
+  // Directional light
   const dirLight = new THREE.DirectionalLight(0x0099ff, 1);
   dirLight.position.set(0, 1, 0); // Light from above
   scene.add(dirLight);
 
-  // Set up OrbitControls for mouse/touch interaction
   // Allows user to rotate, pan, and zoom the camera
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;                  // Smooth camera movement with inertia
-  controls.dampingFactor = CONFIG.DAMPING_FACTOR; // How much inertia (0 = none, 1 = infinite)
-  controls.minDistance = CONFIG.MIN_DISTANCE;     // Can't zoom closer than this
-  controls.maxDistance = CONFIG.MAX_DISTANCE;     // Can't zoom farther than this
+  controls.enableDamping = true;
+  controls.dampingFactor = CONFIG.DAMPING_FACTOR;
+  controls.minDistance = CONFIG.MIN_DISTANCE;
+  controls.maxDistance = CONFIG.MAX_DISTANCE;
 
-  // Create raycaster for mouse picking (detecting clicks on objects)
   const raycaster = new THREE.Raycaster();
 
   return { scene, camera, renderer, controls, raycaster };
 }
 
-/**
- * Easing function for smooth camera animations
- * Implements ease-in-out quadratic easing (slow start, fast middle, slow end)
- * 
- * Visual curve: https://easings.net/#easeInOutQuad
- * 
- * @param t - Progress value between 0 and 1
- * @returns Eased value between 0 and 1
- */
+// For smooth camera animation
 function easeInOutQuad(t: number): number {
-  // First half (0 to 0.5): Ease in with y = 2t²
-  // Second half (0.5 to 1): Ease out with y = 1 - (2-2t)²/2
+  // From https://easings.net/#easeInOutQuad
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
-/**
- * Animate camera to a new position with smooth easing
- * Used when user clicks on a star to zoom to it
- * 
- * This uses requestAnimationFrame to create smooth interpolation
- * between current and target camera positions
- * 
- * @param camera - The camera to animate
- * @param controls - OrbitControls (to update target/look-at point)
- * @param targetPosition - Where the camera should end up
- * @param lookAtPosition - What point the camera should look at
- */
 function animateCameraToPosition(
   camera: THREE.PerspectiveCamera,
   controls: OrbitControls,
   targetPosition: THREE.Vector3,
   lookAtPosition: THREE.Vector3
 ) {
-  // Store starting positions for interpolation
+
   const startPosition = camera.position.clone();  // Clone to avoid reference issues
-  const startTarget = controls.target.clone();    // Current orbit center
-  const startTime = Date.now();                   // Animation start time
+  const startTarget = controls.target.clone();
+  const startTime = Date.now();
   
-  /**
-   * Recursive animation function - called each frame
-   * Interpolates camera position from start to target over time
-   */
   const animate = () => {
-    // Calculate elapsed time and progress (0 to 1)
     const elapsed = Date.now() - startTime;
     const progress = Math.min(elapsed / CONFIG.CAMERA_ANIMATION_DURATION, 1);
     
-    // Apply easing function for smooth acceleration/deceleration
     const eased = easeInOutQuad(progress);
     
     // Linearly interpolate (lerp) between start and target positions using eased progress
-    // lerpVectors: result = start + (target - start) * eased
-    // This creates smooth motion following the easing curve
     camera.position.lerpVectors(startPosition, targetPosition, eased);
     controls.target.lerpVectors(startTarget, lookAtPosition, eased);
     
     // Continue animation if not finished (progress < 1)
     if (progress < 1) {
-      requestAnimationFrame(animate); // Schedule next frame
+      requestAnimationFrame(animate);
     }
   };
   
-  animate(); // Start the animation
+  animate();
 }
 
 export default App;
