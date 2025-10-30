@@ -1,192 +1,153 @@
-// starRenderer.ts
-
 import * as THREE from 'three';
 import { CONFIG } from './constants';
 
-// Defines the structure of star data from backend
 export interface StarData {
-  id: number;        // Unique star identifier
-  x: number;         // X-coordinate
-  y: number;         // Y-coordinate
-  z: number;         // Z-coordinate
-  name?: string;     // Optional: Star name
-  magnitude?: number; // Optional: Brightness value
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  name?: string;
+  magnitude?: number;
 }
 
-// Interface for the LOD system object returned by createGalaxy
-// This provides methods to control and interact with the star rendering
 interface LODSystem {
-  group: THREE.Group;                           // Three.js group containing all star objects
-  updateLOD: (camera: THREE.Camera) => void;    // Function to recalculate which stars should be detailed
-  cleanup: () => void;                          // Function to dispose of GPU resources when done
-  getDetailedStarCount: () => number;           // Function to get count of currently detailed stars
-  selectStar: (starId: number) => void;         // Function to highlight a selected star
+  group: THREE.Group;
+  updateLOD: (camera: THREE.Camera) => void;
+  cleanup: () => void;
+  getDetailedStarCount: () => number;
+  selectStar: (starId: number) => void;
 }
 
 /**
- * LOD Strategy: O(n)
- * 1. All stars start as simple points in a point cloud
- * 2. Stars within DETAIL_DISTANCE become individual sphere meshes with glow
- * 3. As camera moves, stars dynamically switch between point and detailed representation
- * 4. Limit to MAX_DETAILED_STARS to prevent GPU overload
- * @returns LODSystem object with methods to control star rendering
+ * Create the galaxy visualization with LOD system
  */
 export function createGalaxy(
   scene: THREE.Scene,
   starData: StarData[],
-  camera: THREE.Camera
+  camera: THREE.Camera,
+  pathStarIds: Set<number> | null = null,
+  pathSequence: number[] = []
 ): LODSystem {
-  console.log('Creating galaxy with LOD rendering...');
-  const startTime = performance.now(); // performance monitoring
+  console.log(`Creating galaxy with ${starData.length} stars`);
+  const startTime = performance.now();
 
-  // Group to hold all star-related objects (point cloud + detailed stars)
   const galaxyGroup = new THREE.Group();
 
-  // 1. Create point cloud for ALL stars
+  // Point cloud for all stars
   const { pointCloud, positions, originalPositions } = createPointCloud(starData);
   galaxyGroup.add(pointCloud);
 
-  // 2. Create a separate group to hold detailed star meshes
+  // Group for detailed star spheres
   const detailedStarsGroup = new THREE.Group();
-  detailedStarsGroup.name = 'detailedStars'; // for debugging
+  detailedStarsGroup.name = 'detailedStars';
   galaxyGroup.add(detailedStarsGroup);
 
-  const detailedStarMap = new Map<number, THREE.Group>(); 
+  // Path line if in path mode
+  let pathLine: THREE.Line | null = null;
+  if (pathSequence.length > 0) {
+    pathLine = createPathLine(starData, pathSequence);
+    galaxyGroup.add(pathLine);
+  }
+
+  // Track detailed stars and selection
+  const detailedStarMap = new Map<number, THREE.Group>();
   const starIndexMap = new Map<number, number>();
   let selectedStarId: number | null = null;
-
-  // Build the star ID
-  starData.forEach((star, index) => {
-    starIndexMap.set(star.id, index);
+  
+  starData.forEach((star, idx) => {
+    starIndexMap.set(star.id, idx);
   });
 
-  /**
-   * Update which stars are rendered in detail based on camera position.
-   * Algorithm:
-   * 1. Calculate squared distance from camera to each star
-   * 2. Filter stars within DETAIL_DISTANCE
-   * 3. Sort by distance and take closest MAX_DETAILED_STARS
-   * 4. Add new detailed stars, remove ones that moved too far
-   * 5. Update point cloud to hide/show corresponding points
-   */
+  // Update LOD based on camera position
   const updateLOD = (camera: THREE.Camera) => {
     const cameraPos = camera.position;
-    const detailDistSq = CONFIG.DETAIL_DISTANCE * CONFIG.DETAIL_DISTANCE;
+    const isPathMode = pathStarIds !== null && pathStarIds.size > 0;
+    let shouldBeDetailed: Set<number>;
 
-    // Find all stars within the detail distance threshold
-    const candidateStars: Array<{ index: number; distSq: number }> = [];
-    
-    // Check distance to every star
-    for (let i = 0; i < starData.length; i++) {
-      const star = starData[i];
-      
-      const dx = star.x - cameraPos.x;
-      const dy = star.y - cameraPos.y;
-      const dz = star.z - cameraPos.z;
-      const distSq = dx * dx + dy * dy + dz * dz;
-      
-      // Only consider stars within the detail distance
-      if (distSq <= detailDistSq) {
-        candidateStars.push({ index: i, distSq });
-      }
-    }
-
-    // Sort candidates by distance (closest first) for prioritization
-    // If we have more candidates than MAX_DETAILED_STARS, we want the closest ones
-    candidateStars.sort((a, b) => a.distSq - b.distSq);
-    
-    const shouldBeDetailed = new Set<number>(
-      candidateStars.slice(0, CONFIG.MAX_DETAILED_STARS).map(s => s.index)
-    );
-
-    // Always keep the selected star detailed, even if it's far away
-    if (selectedStarId !== null) {
-      const selectedIndex = starIndexMap.get(selectedStarId);
-      if (selectedIndex !== undefined) {
-        shouldBeDetailed.add(selectedIndex); // Force-include selected star
-      }
-    }
-
-    let addedCount = 0;
-    let removedCount = 0;
-
-    // Remove stars that are no longer close enough to be detailed
-    detailedStarMap.forEach((starMesh, index) => {
-      if (!shouldBeDetailed.has(index)) {
-        detailedStarsGroup.remove(starMesh);
-        detailedStarMap.delete(index);
-        
-        // Restore the point in the point cloud by resetting its position
-        positions[index * 3] = originalPositions[index * 3];       // x
-        positions[index * 3 + 1] = originalPositions[index * 3 + 1]; // y
-        positions[index * 3 + 2] = originalPositions[index * 3 + 2]; // z
-        
-        removedCount++;
-      }
-    });
-
-    // Add new detailed stars that just came within range
-    shouldBeDetailed.forEach(index => {
-      if (!detailedStarMap.has(index)) {
-        // Star is newly within detail range - create detailed mesh
-        const star = starData[index];
-        const detailedStar = createDetailedStar(); // Create sphere + glow mesh
-        detailedStar.position.set(star.x, star.y, star.z); // Position in 3D space
-        
-        // Store star data in userData for raycasting/selection
-        detailedStar.userData.starData = star;
-        detailedStar.userData.starIndex = index;
-        
-        // Add to scene and tracking map
-        detailedStarsGroup.add(detailedStar);
-        detailedStarMap.set(index, detailedStar);
-        
-        // Hide the corresponding point in the point cloud
-        // Move it far away instead of removing it
-        positions[index * 3] = 10000;
-        positions[index * 3 + 1] = 10000; // could change
-        positions[index * 3 + 2] = 10000;
-        
-        addedCount++;
-      }
-    });
-
-    // Update point cloud geometry if any changes were made
-    if (addedCount > 0 || removedCount > 0) {
-      pointCloud.geometry.attributes.position.needsUpdate = true; // Flag for GPU update
-      console.log(`LOD update: +${addedCount} -${removedCount} stars, total detailed: ${detailedStarMap.size}`);
-    }
-  };
-
-  // Select and highlight a specific star.
-  const selectStar = (starId: number) => {
-    if (selectedStarId !== null) {
-      const prevIndex = starIndexMap.get(selectedStarId);
-      if (prevIndex !== undefined) {
-        const prevStarMesh = detailedStarMap.get(prevIndex);
-        if (prevStarMesh) {
-          setStarColor(prevStarMesh, 0xffff00);
+    if (isPathMode) {
+      // Path mode: show all path stars
+      shouldBeDetailed = new Set<number>();
+      starData.forEach((star, idx) => {
+        if (pathStarIds!.has(star.id)) {
+          shouldBeDetailed.add(idx);
         }
+      });
+    } else {
+      // Normal mode: show nearby stars
+      const nearby: Array<{ index: number; distSq: number }> = [];
+      const distSq = CONFIG.DETAIL_DISTANCE * CONFIG.DETAIL_DISTANCE;
+      
+      for (let i = 0; i < starData.length; i++) {
+        const star = starData[i];
+        const dx = star.x - cameraPos.x;
+        const dy = star.y - cameraPos.y;
+        const dz = star.z - cameraPos.z;
+        const d = dx * dx + dy * dy + dz * dz;
+        
+        if (d <= distSq) nearby.push({ index: i, distSq: d });
       }
+
+      nearby.sort((a, b) => a.distSq - b.distSq);
+      shouldBeDetailed = new Set(nearby.slice(0, CONFIG.MAX_DETAILED_STARS).map(s => s.index));
     }
-    
-    selectedStarId = starId;
-    
-    // Force immediate LOD update to ensure selected star is rendered as detailed mesh
-    updateLOD(camera);
-    
-    const newIndex = starIndexMap.get(starId);
-    if (newIndex !== undefined) {
-      const newStarMesh = detailedStarMap.get(newIndex);
-      if (newStarMesh) {
-        setStarColor(newStarMesh, 0x00ff88);
-      } else {
-        console.warn('Selected star not in detailed map after LOD update:', starId);
+
+    // Always include selected star
+    if (selectedStarId !== null) {
+      const idx = starIndexMap.get(selectedStarId);
+      if (idx !== undefined) shouldBeDetailed.add(idx);
+    }
+
+    // Remove stars no longer in range
+    let added = 0, removed = 0;
+    detailedStarMap.forEach((mesh, idx) => {
+      if (!shouldBeDetailed.has(idx)) {
+        detailedStarsGroup.remove(mesh);
+        detailedStarMap.delete(idx);
+        
+        // Restore point in cloud
+        positions[idx * 3] = originalPositions[idx * 3];
+        positions[idx * 3 + 1] = originalPositions[idx * 3 + 1];
+        positions[idx * 3 + 2] = originalPositions[idx * 3 + 2];
+        removed++;
       }
+    });
+
+    // Add or update detailed stars
+    shouldBeDetailed.forEach(idx => {
+      const star = starData[idx];
+      const color = selectedStarId === star.id ? 0x00ff88 : 0xffff00;
+      
+      if (!detailedStarMap.has(idx)) {
+        const mesh = createDetailedStar();
+        mesh.position.set(star.x, star.y, star.z);
+        mesh.userData.starData = star;
+        mesh.userData.starIndex = idx;
+        setStarColor(mesh, color);
+        
+        detailedStarsGroup.add(mesh);
+        detailedStarMap.set(idx, mesh);
+        
+        // Hide from point cloud
+        positions[idx * 3] = 10000;
+        positions[idx * 3 + 1] = 10000;
+        positions[idx * 3 + 2] = 10000;
+        added++;
+      } else {
+        setStarColor(detailedStarMap.get(idx)!, color);
+      }
+    });
+
+    if (added > 0 || removed > 0) {
+      pointCloud.geometry.attributes.position.needsUpdate = true;
     }
   };
 
-  console.log(`Galaxy created in ${(performance.now() - startTime).toFixed(2)}ms with ${starData.length} stars`);
+  const selectStar = (starId: number) => {
+    selectedStarId = starId;
+    updateLOD(camera);
+  };
+
+  console.log(`Galaxy created in ${(performance.now() - startTime).toFixed(0)}ms`);
 
   scene.add(galaxyGroup);
   updateLOD(camera);
@@ -196,13 +157,16 @@ export function createGalaxy(
     updateLOD,
     selectStar,
     cleanup: () => {
-      // Dispose of point cloud resources
       pointCloud.geometry.dispose();
       (pointCloud.material as THREE.Material).dispose();
       
-      // Dispose of all detailed star meshes
-      detailedStarMap.forEach(starMesh => {
-        starMesh.children.forEach(child => {
+      if (pathLine) {
+        pathLine.geometry.dispose();
+        (pathLine.material as THREE.Material).dispose();
+      }
+      
+      detailedStarMap.forEach(mesh => {
+        mesh.children.forEach(child => {
           if (child instanceof THREE.Mesh) {
             child.geometry.dispose();
             (child.material as THREE.Material).dispose();
@@ -214,74 +178,68 @@ export function createGalaxy(
   };
 }
 
-// Create a point cloud containing all stars.
+/**
+ * Create point cloud for all stars
+ */
 function createPointCloud(starData: StarData[]) {
-  const positions = new Float32Array(starData.length * 3); // Float32Array is more memory-efficient and faster for GPU than regular arrays
+  const positions = new Float32Array(starData.length * 3);
   
   starData.forEach((star, i) => {
-    positions[i * 3] = star.x;       // x coordinate at index i*3
-    positions[i * 3 + 1] = star.y;   // y coordinate at index i*3+1
-    positions[i * 3 + 2] = star.z;   // z coordinate at index i*3+2
+    positions[i * 3] = star.x;
+    positions[i * 3 + 1] = star.y;
+    positions[i * 3 + 2] = star.z;
   });
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-  // Create material for point rendering
   const material = new THREE.PointsMaterial({
     color: 0xffffff,
     size: CONFIG.POINT_SIZE,
     sizeAttenuation: true,
     transparent: true,
-    opacity: CONFIG.POINT_OPACITY, 
+    opacity: CONFIG.POINT_OPACITY,
   });
 
-  // Create the point cloud object
   const pointCloud = new THREE.Points(geometry, material);
-  pointCloud.userData.starData = starData; // Store reference to star data for raycasting
+  pointCloud.userData.starData = starData;
   pointCloud.name = 'pointCloud';
 
-  // Keep a copy of original positions for restoring points when they return to point cloud
-  const originalPositions = new Float32Array(positions);
-
-  return { pointCloud, positions, originalPositions };
+  return { pointCloud, positions, originalPositions: new Float32Array(positions) };
 }
 
-// Create a detailed star mesh with a core sphere and glow effect.
+/**
+ * Create detailed star sphere with glow
+ */
 function createDetailedStar(): THREE.Group {
   const group = new THREE.Group();
   
-  // Star Core
-  const geometry = new THREE.SphereGeometry(
-    CONFIG.DETAILED_STAR_SIZE,
-    CONFIG.DETAILED_STAR_SEGMENTS,
-    CONFIG.DETAILED_STAR_SEGMENTS
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(CONFIG.DETAILED_STAR_SIZE, CONFIG.DETAILED_STAR_SEGMENTS, CONFIG.DETAILED_STAR_SEGMENTS),
+    coreMat
   );
-
-  const material = new THREE.MeshBasicMaterial({ color: 0xffff00 }); // Yellow
-  const star = new THREE.Mesh(geometry, material);
-  star.name = 'starCore';
-  group.add(star);
+  core.name = 'starCore';
+  group.add(core);
   
-  // Glow Effect
-  const glowGeometry = new THREE.SphereGeometry(
-    CONFIG.GLOW_SIZE,
-    CONFIG.DETAILED_STAR_SEGMENTS,
-    CONFIG.DETAILED_STAR_SEGMENTS
-  );
-  const glowMaterial = new THREE.MeshBasicMaterial({
+  const glowMat = new THREE.MeshBasicMaterial({
     color: 0xffff00,
     transparent: true,
     opacity: CONFIG.GLOW_OPACITY
   });
-  const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(CONFIG.GLOW_SIZE, CONFIG.DETAILED_STAR_SEGMENTS, CONFIG.DETAILED_STAR_SEGMENTS),
+    glowMat
+  );
   glow.name = 'starGlow';
   group.add(glow);
   
   return group;
 }
 
-// Set the color of a star mesh (both core and glow)
+/**
+ * Set the color of a star mesh (both core and glow)
+ */
 function setStarColor(starGroup: THREE.Group, color: number) {
   starGroup.children.forEach(child => {
     if (child instanceof THREE.Mesh) {
@@ -290,21 +248,85 @@ function setStarColor(starGroup: THREE.Group, color: number) {
   });
 }
 
-// Helper to extract star data from a raycaster intersection
+/**
+ * Helper to get star data from raycaster intersection
+ */
 export function getStarDataFromIntersection(
   intersection: THREE.Intersection,
   allStars: StarData[]
 ): StarData | null {
-  // Check if the intersection is with a point in the point cloud
-  // Points have an 'index' property that directly maps to the star array
+  // Check if it's a point cloud
   if (intersection.index !== undefined && intersection.object instanceof THREE.Points) {
-    return allStars[intersection.index]; // Direct lookup by index
+    return allStars[intersection.index];
   }
   
-  // Check if it's a detailed star mesh
+  // Check if it's a detailed star - look up the parent chain for userData
   let obj: THREE.Object3D | null = intersection.object;
   while (obj && !obj.userData.starData) {
     obj = obj.parent;
   }
+  
   return obj?.userData.starData ?? null;
+}
+
+/**
+ * Create a line connecting all stars in the path sequence
+ */
+function createPathLine(starData: StarData[], pathSequence: number[]): THREE.Line {
+  const starIdToData = new Map<number, StarData>();
+  starData.forEach(star => starIdToData.set(star.id, star));
+  
+  // Build positions array from path sequence
+  const positions: number[] = [];
+  let missingStars = 0;
+  let totalDistance = 0;
+  
+  pathSequence.forEach((starId, i) => {
+    const star = starIdToData.get(starId);
+    if (star) {
+      positions.push(star.x, star.y, star.z);
+      
+      // Calculate distance to previous star
+      if (i > 0) {
+        const prevStarId = pathSequence[i - 1];
+        const prevStar = starIdToData.get(prevStarId);
+        if (prevStar) {
+          const dx = star.x - prevStar.x;
+          const dy = star.y - prevStar.y;
+          const dz = star.z - prevStar.z;
+          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          totalDistance += dist;
+          
+          // Log first few segments for debugging
+          if (i <= 5) {
+            console.log(`Segment ${i-1}→${i}: Star ${prevStarId} (${prevStar.x.toFixed(1)}, ${prevStar.y.toFixed(1)}, ${prevStar.z.toFixed(1)}) → Star ${starId} (${star.x.toFixed(1)}, ${star.y.toFixed(1)}, ${star.z.toFixed(1)}) = ${dist.toFixed(2)} units`);
+          }
+        }
+      }
+    } else {
+      missingStars++;
+      console.warn(`Star ID ${starId} in path not found in starData`);
+    }
+  });
+  
+  if (missingStars > 0) {
+    console.warn(`Path line missing ${missingStars} stars out of ${pathSequence.length}`);
+  }
+  
+  console.log(`Created path line with ${positions.length / 3} points, total distance: ${totalDistance.toFixed(2)}`);
+  
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+  
+  const material = new THREE.LineBasicMaterial({
+    color: 0x00ccff, // Cyan color
+    linewidth: 2,
+    transparent: true,
+    opacity: 0.6
+  });
+  
+  const line = new THREE.Line(geometry, material);
+  line.name = 'pathLine';
+  
+  return line;
 }

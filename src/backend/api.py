@@ -47,11 +47,15 @@ async def startup_event():
     print(f"Loaded {len(STAR_NODES)} stars")
 
 @app.get("/djikstra")
-async def djikstra_call(fuel, start, end):
+async def djikstra_call(fuel = 30, start = 0, end = 1):
     graph = build_graph(STAR_NODES, fuel)
-    sequence, distance = djikstras(STAR_NODES, graph, start, end)
+    index_sequence, distance = djikstras(STAR_NODES, graph, start, end)
+    
+    # Convert array indices to actual star IDs
+    id_sequence = [STAR_NODES[i].id for i in index_sequence]
+    
     return {
-        "sequence": sequence,
+        "sequence": id_sequence,
         "distance": distance
     }
 
