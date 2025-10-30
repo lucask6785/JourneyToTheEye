@@ -4,6 +4,7 @@ import numpy as np
 from scipy.spatial import KDTree
 import math
 import heapq
+import time
 
 
 class StarNode:
@@ -146,10 +147,26 @@ def djikstras(nodes, graph, startStar, goalStar):
 
     return (sequence, dist[goalStar])
 
+def AStar(nodes, graph, startStar, goalStar):
+    gScore = {}
+    fScore = {}
+
+    pass
+
+'''
+start_time = time.perf_counter()
 nodes = load_stars("../../public/stars.csv")
-graph = build_graph(nodes, 30)
+graph = build_graph(nodes, 50)
+end_time = time.perf_counter()
+elapsed_time = end_time - start_time
+print(f"Elapsed time: {elapsed_time:.4f} seconds")
+start_time = time.perf_counter()
 sequence, dist = djikstras(nodes, graph, 0, 1)
+end_time = time.perf_counter()
+elapsed_time = end_time - start_time
+print(f"Elapsed time: {elapsed_time:.4f} seconds")
 print(dist, sequence)
 for i in sequence:
     star = nodes[i]
     print(star.x, star.y, star.z)
+    '''
