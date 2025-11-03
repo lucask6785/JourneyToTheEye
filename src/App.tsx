@@ -257,9 +257,10 @@ function App() {
         <div className="algorithm-buttons">
           <button 
             className="algorithm-btn"
-            disabled={!startingStar || !destinationStar}
+            disabled={!startingStar || !destinationStar || pathLoading}
+            onClick={handleFindPath}
           >
-            DIJKSTRA
+            {pathLoading ? 'Finding Path...' : 'DIJKSTRAS'}
           </button>
           <button 
             className="algorithm-btn"

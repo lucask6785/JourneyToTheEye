@@ -124,7 +124,6 @@ def djikstras(nodes, graph, startStar, goalStar):
         if dist[u] < d:
             continue
         if u == goalStar:
-            #found path (figure out if needs to be changed)
             break
         for v in graph[u]:
             new_dist = d + distance(nodes, u, v)

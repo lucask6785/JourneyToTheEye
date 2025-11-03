@@ -12,9 +12,17 @@ export function useDijkstra() {
     try {
       setLoading(true);
       setError(null);
+
+      const params = new URLSearchParams();
+
+      params.append('fuel', String(fuel));
+      params.append('start', String(startStarId));
+      params.append('end', String(destinationStarId));
+
+      const fullUrl = `${CONFIG.DIJKSTRA_URL}?${params.toString()}`;
       
       // Update URL to include startStarId and destinationStarId parameters
-      const response = await fetch(CONFIG.DJIKSTRA_URL);
+      const response = await fetch(fullUrl);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
