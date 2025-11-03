@@ -1,32 +1,16 @@
 import * as THREE from 'three';
-import { CONFIG } from './constants';
+import { CONFIG } from '../constants';
+import type { StarData, LODSystem } from '../types';
 
-export interface StarData {
-  id: number;
-  x: number;
-  y: number;
-  z: number;
-  name?: string;
-  magnitude?: number;
-}
-
-interface LODSystem {
-  group: THREE.Group;
-  updateLOD: (camera: THREE.Camera) => void;
-  cleanup: () => void;
-  getDetailedStarCount: () => number;
-  selectStar: (starId: number) => void;
-}
-
-/**
- * Create the galaxy visualization with LOD system
- */
+// Create the galaxy visualization with LOD system
 export function createGalaxy(
   scene: THREE.Scene,
   starData: StarData[],
   camera: THREE.Camera,
   pathStarIds: Set<number> | null = null,
-  pathSequence: number[] = []
+  pathSequence: number[] = [],
+  startingStarId: number | null = null,
+  destinationStarId: number | null = null
 ): LODSystem {
   console.log(`Creating galaxy with ${starData.length} stars`);
   const startTime = performance.now();
@@ -53,6 +37,8 @@ export function createGalaxy(
   const detailedStarMap = new Map<number, THREE.Group>();
   const starIndexMap = new Map<number, number>();
   let selectedStarId: number | null = null;
+  let currentStartingStarId: number | null = startingStarId;
+  let currentDestinationStarId: number | null = destinationStarId;
   
   starData.forEach((star, idx) => {
     starIndexMap.set(star.id, idx);
@@ -96,6 +82,16 @@ export function createGalaxy(
       const idx = starIndexMap.get(selectedStarId);
       if (idx !== undefined) shouldBeDetailed.add(idx);
     }
+    
+    // Always include starting and destination stars
+    if (currentStartingStarId !== null) {
+      const idx = starIndexMap.get(currentStartingStarId);
+      if (idx !== undefined) shouldBeDetailed.add(idx);
+    }
+    if (currentDestinationStarId !== null) {
+      const idx = starIndexMap.get(currentDestinationStarId);
+      if (idx !== undefined) shouldBeDetailed.add(idx);
+    }
 
     // Remove stars no longer in range
     let added = 0, removed = 0;
@@ -115,7 +111,16 @@ export function createGalaxy(
     // Add or update detailed stars
     shouldBeDetailed.forEach(idx => {
       const star = starData[idx];
-      const color = selectedStarId === star.id ? 0x00ff88 : 0xffff00;
+      
+      // Determine color based on star role
+      let color = 0xffff00; 
+      if (star.id === currentStartingStarId) {
+        color = 0x0088ff;
+      } else if (star.id === currentDestinationStarId) {
+        color = 0xff0000;
+      } else if (selectedStarId === star.id) {
+        color = 0x00ff88;
+      }
       
       if (!detailedStarMap.has(idx)) {
         const mesh = createDetailedStar();
@@ -142,8 +147,18 @@ export function createGalaxy(
     }
   };
 
-  const selectStar = (starId: number) => {
+  const selectStar = (starId: number | null) => {
     selectedStarId = starId;
+    updateLOD(camera);
+  };
+  
+  const setStartingStar = (starId: number | null) => {
+    currentStartingStarId = starId;
+    updateLOD(camera);
+  };
+  
+  const setDestinationStar = (starId: number | null) => {
+    currentDestinationStarId = starId;
     updateLOD(camera);
   };
 
@@ -156,6 +171,8 @@ export function createGalaxy(
     group: galaxyGroup,
     updateLOD,
     selectStar,
+    setStartingStar,
+    setDestinationStar,
     cleanup: () => {
       pointCloud.geometry.dispose();
       (pointCloud.material as THREE.Material).dispose();
@@ -178,9 +195,7 @@ export function createGalaxy(
   };
 }
 
-/**
- * Create point cloud for all stars
- */
+// Create point cloud for all stars
 function createPointCloud(starData: StarData[]) {
   const positions = new Float32Array(starData.length * 3);
   
@@ -208,9 +223,7 @@ function createPointCloud(starData: StarData[]) {
   return { pointCloud, positions, originalPositions: new Float32Array(positions) };
 }
 
-/**
- * Create detailed star sphere with glow
- */
+// Create detailed star sphere with glow
 function createDetailedStar(): THREE.Group {
   const group = new THREE.Group();
   
@@ -237,9 +250,8 @@ function createDetailedStar(): THREE.Group {
   return group;
 }
 
-/**
- * Set the color of a star mesh (both core and glow)
- */
+
+// Set the color of a star mesh (both core and glow)
 function setStarColor(starGroup: THREE.Group, color: number) {
   starGroup.children.forEach(child => {
     if (child instanceof THREE.Mesh) {
@@ -248,9 +260,7 @@ function setStarColor(starGroup: THREE.Group, color: number) {
   });
 }
 
-/**
- * Helper to get star data from raycaster intersection
- */
+// Helper to get star data from raycaster intersection
 export function getStarDataFromIntersection(
   intersection: THREE.Intersection,
   allStars: StarData[]
@@ -269,9 +279,7 @@ export function getStarDataFromIntersection(
   return obj?.userData.starData ?? null;
 }
 
-/**
- * Create a line connecting all stars in the path sequence
- */
+// Create a line connecting all stars in the path sequence
 function createPathLine(starData: StarData[], pathSequence: number[]): THREE.Line {
   const starIdToData = new Map<number, StarData>();
   starData.forEach(star => starIdToData.set(star.id, star));
@@ -297,7 +305,6 @@ function createPathLine(starData: StarData[], pathSequence: number[]): THREE.Lin
           const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
           totalDistance += dist;
           
-          // Log first few segments for debugging
           if (i <= 5) {
             console.log(`Segment ${i-1}→${i}: Star ${prevStarId} (${prevStar.x.toFixed(1)}, ${prevStar.y.toFixed(1)}, ${prevStar.z.toFixed(1)}) → Star ${starId} (${star.x.toFixed(1)}, ${star.y.toFixed(1)}, ${star.z.toFixed(1)}) = ${dist.toFixed(2)} units`);
           }
@@ -312,8 +319,6 @@ function createPathLine(starData: StarData[], pathSequence: number[]): THREE.Lin
   if (missingStars > 0) {
     console.warn(`Path line missing ${missingStars} stars out of ${pathSequence.length}`);
   }
-  
-  console.log(`Created path line with ${positions.length / 3} points, total distance: ${totalDistance.toFixed(2)}`);
   
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
