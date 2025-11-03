@@ -97,25 +97,6 @@ npm run lint
 - `GET /stars/{star_id}/neighbors?fuel=5.0` - Get neighbors of specific star
 - `GET /stars/region` - Query stars in a bounding box
 
-## 📁 Project Structure
-
-```
-JourneyToTheEye/
-├── public/
-│   └── stars.csv              # Star dataset (100k+ stars)
-├── src/
-│   ├── backend/
-│   │   ├── api.py             # FastAPI server with endpoints
-│   │   └── backend.py         # k-d tree and spatial queries
-│   ├── App.tsx                # Main React component
-│   ├── starRenderer.ts        # Three.js rendering logic
-│   ├── constants.ts           # Configuration constants
-│   └── main.tsx               # React entry point
-├── requirements.txt           # Python dependencies
-├── package.json               # Node dependencies
-└── README.md                  # This file
-```
-
 ## 🔧 Configuration
 
 Edit `src/constants.ts` to adjust:
@@ -153,7 +134,3 @@ Edit `src/constants.ts` to adjust:
 - **Vite** - Build tool
 - **FastAPI** - Python backend framework
 - **NumPy/SciPy** - Scientific computing and k-d trees
-
-## 📄 License
-
-Built with love for COP3530 Project 2 ✨

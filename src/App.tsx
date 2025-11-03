@@ -1,125 +1,137 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import * as THREE from 'three';
-import { OrbitControls } from 'three-stdlib';
-import type { StarData } from './starRenderer';
-import { createGalaxy, getStarDataFromIntersection } from './starRenderer';
+import { createGalaxy, getStarDataFromIntersection } from './utils/starRenderer';
 import { CONFIG } from './constants';
+import { useFetchStars } from './hooks/useFetchStars';
+import { useDijkstra } from './hooks/useDijkstra';
+import { usePopupPosition } from './hooks/usePopupPosition';
+import { setupScene, animateCameraToStar } from './utils/threeHelpers';
+import { StarPopup } from './components/starPopup';
+import { InfoBox } from './components/InfoBox';
+import { LoadingScreen } from './components/LoadingScreen';
+import { ErrorScreen } from './components/ErrorScreen';
+import { FuelSlider } from './components/FuelSlider';
+
+import type { StarData, LODSystem } from './types';
 import './App.css';
 
-interface BackendResponse {
-  positions: number[][];
-  metadata: Array<{
-    id: number;
-    name: string;
-    magnitude: number;
-  }>;
-  bounds: { min: number[]; max: number[] };
-  count: number;
-}
-
-interface DjikstraResponse {
-  sequence: number[];
-  distance: number;
-}
-
-interface SceneSetup {
-  scene: THREE.Scene;
-  camera: THREE.PerspectiveCamera;
-  renderer: THREE.WebGLRenderer;
-  controls: OrbitControls;
-  raycaster: THREE.Raycaster;
-}
+const UI_SELECTORS = '.info-box, .star-popup, .direction-input, .fuel-slider-wrapper';
 
 function App() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const lodSystemRef = useRef<any>(null);
+  const { stars, loading, error } = useFetchStars();
+  const { pathStarIds, pathSequence, loading: pathLoading, error: pathError, runDijkstra } = useDijkstra();
   
-  const [stars, setStars] = useState<StarData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [detailedCount, setDetailedCount] = useState(0);
   const [selectedStar, setSelectedStar] = useState<StarData | null>(null);
-  const [pathStarIds, setPathStarIds] = useState<Set<number> | null>(null);
-  const [pathSequence, setPathSequence] = useState<number[]>([]);
-  const hasAnimatedToFirstStar = useRef(false); // Track if we've animated to first star
+  const [startingStar, setStartingStar] = useState<StarData | null>(null);
+  const [destinationStar, setDestinationStar] = useState<StarData | null>(null);
+  const [showPopup, setShowPopup] = useState(false);
+  const [detailedCount, setDetailedCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchPlaceholder, setSearchPlaceholder] = useState('Search by star ID');
+  const [fuelLimit, setFuelLimit] = useState(50);
+  
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lodSystemRef = useRef<LODSystem | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const controlsRef = useRef<any>(null);
 
-  // Fetch stars and run pathfinding
-  useEffect(() => {
-    const fetchStars = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(CONFIG.BACKEND_URL);
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data: BackendResponse = await response.json();
-        const transformedStars: StarData[] = data.positions.map((pos, index) => ({
-          id: data.metadata[index].id,
-          x: pos[0],
-          y: pos[1],
-          z: pos[2],
-          name: data.metadata[index].name,
-          magnitude: data.metadata[index].magnitude,
-        }));
-        
-        setStars(transformedStars);
-        console.log(`Loaded ${transformedStars.length} stars`);
-        
-        // Run pathfinding
-        await runDijkstra(transformedStars);
-      } catch (err) {
-        console.error('Error fetching stars:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load stars');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const startingStarId = startingStar?.id ?? null;
+  const destinationStarId = destinationStar?.id ?? null;
+  const popupPosition = usePopupPosition(selectedStar, showPopup, cameraRef.current);
 
-    const runDijkstra = async (allStars: StarData[]) => {
-      try {
-        const response = await fetch(CONFIG.DJIKSTRA_URL);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        
-        const data: DjikstraResponse = await response.json();
-        console.log(`Path found: ${data.sequence.length} stars, distance: ${data.distance}`);
-        
-        setPathStarIds(new Set(data.sequence));
-        setPathSequence(data.sequence);
-        
-        const firstStar = allStars.find(star => star.id === data.sequence[0]);
-        if (firstStar) setSelectedStar(firstStar);
-      } catch (err) {
-        console.error('Pathfinding error:', err);
-      }
-    };
-
-    fetchStars();
+  const selectAndAnimateToStar = useCallback((star: StarData) => {
+    console.log('Selected:', star.name, 'ID:', star.id);
+    setSelectedStar(star);
+    setShowPopup(false);
+    lodSystemRef.current?.selectStar(star.id);
+    
+    if (cameraRef.current && controlsRef.current) {
+      animateCameraToStar(star, cameraRef.current, controlsRef.current, () => {
+        setShowPopup(true);
+      });
+    }
   }, []);
 
-  // Setup Three.js scene
+  // Event Handlers
+  const handleSetStartingStar = useCallback(() => {
+    if (selectedStar) {
+      setStartingStar(selectedStar);
+      lodSystemRef.current?.setStartingStar(selectedStar.id);
+      setSelectedStar(null);
+      setShowPopup(false);
+      lodSystemRef.current?.selectStar(null);
+    }
+  }, [selectedStar]);
+
+  const handleSetDestinationStar = useCallback(() => {
+    if (selectedStar) {
+      setDestinationStar(selectedStar);
+      lodSystemRef.current?.setDestinationStar(selectedStar.id);
+      setSelectedStar(null);
+      setShowPopup(false);
+      lodSystemRef.current?.selectStar(null);
+    }
+  }, [selectedStar]);
+
+  const handleClosePopup = useCallback(() => {
+    setSelectedStar(null);
+    setShowPopup(false);
+    lodSystemRef.current?.selectStar(null);
+  }, []);
+
+  const handleRandomStar = useCallback(() => {
+    if (stars.length === 0) return;
+    
+    const randomIndex = Math.floor(Math.random() * stars.length);
+    const randomStar = stars[randomIndex];
+    selectAndAnimateToStar(randomStar);
+  }, [stars, selectAndAnimateToStar]);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+    setSearchPlaceholder('Search by star ID');
+  }, []);
+
+  const handleSearchSubmit = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter' || !searchQuery.trim()) return;
+    
+    const starId = parseInt(searchQuery.trim());
+    const foundStar = isNaN(starId) ? null : stars.find(star => star.id === starId);
+    
+    if (foundStar) {
+      selectAndAnimateToStar(foundStar);
+      setSearchQuery('');
+    } else {
+      setSearchPlaceholder(`No star found with ID: ${searchQuery}`);
+      setSearchQuery('');
+    }
+  }, [searchQuery, stars, selectAndAnimateToStar]);
+
+  const handleFindPath = useCallback(() => {
+    if (startingStar && destinationStar) {
+      console.log('Finding path with fuel limit:', fuelLimit, 'parsecs');
+      runDijkstra(startingStar.id, destinationStar.id, fuelLimit);
+    }
+  }, [startingStar, destinationStar, fuelLimit, runDijkstra]);
+
+  // Three.js Scene Setup (runs once when stars load)
   useEffect(() => {
     if (!canvasRef.current || stars.length === 0) return;
 
     const { scene, camera, renderer, controls, raycaster } = setupScene(canvasRef.current);
-    const lodSystem = createGalaxy(scene, stars, camera, pathStarIds, pathSequence);
+    cameraRef.current = camera;
+    controlsRef.current = controls;
+    
+    const lodSystem = createGalaxy(
+      scene, 
+      stars, 
+      camera, 
+      pathStarIds, 
+      pathSequence,
+      null,
+      null
+    );
     lodSystemRef.current = lodSystem;
-
-    // Animate to first star once
-    if (selectedStar && pathStarIds && !hasAnimatedToFirstStar.current) {
-      hasAnimatedToFirstStar.current = true;
-      lodSystem.selectStar(selectedStar.id);
-      
-      const direction = camera.position.clone()
-        .sub(new THREE.Vector3(selectedStar.x, selectedStar.y, selectedStar.z))
-        .normalize();
-      
-      const targetPos = new THREE.Vector3(selectedStar.x, selectedStar.y, selectedStar.z)
-        .add(direction.multiplyScalar(CONFIG.CAMERA_ZOOM_DISTANCE));
-      
-      animateCameraToPosition(camera, controls, targetPos, new THREE.Vector3(selectedStar.x, selectedStar.y, selectedStar.z));
-    }
 
     // Animation loop
     let animationId: number;
@@ -139,20 +151,21 @@ function App() {
     };
     animate(0);
 
-    // Mouse interaction for star selection
-    const mouseDownPos = { x: 0, y: 0 };
+    // Mouse interaction
+    let mouseDownPos = { x: 0, y: 0 };
     
     const handleMouseDown = (e: MouseEvent) => {
-      mouseDownPos.x = e.clientX;
-      mouseDownPos.y = e.clientY;
+      if ((e.target as HTMLElement).closest(UI_SELECTORS)) return;
+      mouseDownPos = { x: e.clientX, y: e.clientY };
     };
 
     const handleMouseUp = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest(UI_SELECTORS)) return;
+      
       const dx = e.clientX - mouseDownPos.x;
       const dy = e.clientY - mouseDownPos.y;
       const dragDist = Math.sqrt(dx * dx + dy * dy);
       
-      // Only click if not dragging
       if (dragDist < CONFIG.DRAG_THRESHOLD) {
         const pointer = new THREE.Vector2(
           (e.clientX / window.innerWidth) * 2 - 1,
@@ -162,7 +175,6 @@ function App() {
         raycaster.setFromCamera(pointer, camera);
         raycaster.params.Points!.threshold = CONFIG.RAYCASTER_THRESHOLD;
         
-        // In path mode, only check detailed stars
         const detailedGroup = lodSystem.group.children.find((c: any) => c.name === 'detailedStars');
         const targets = pathStarIds && detailedGroup ? [detailedGroup] : lodSystem.group.children;
         
@@ -170,15 +182,11 @@ function App() {
         if (hits.length > 0) {
           const star = getStarDataFromIntersection(hits[0], stars);
           if (star) {
-            console.log('Selected:', star.name, 'ID:', star.id);
-            setSelectedStar(star);
-            lodSystem.selectStar(star.id);
-            
-            const dir = camera.position.clone().sub(new THREE.Vector3(star.x, star.y, star.z)).normalize();
-            const targetPos = new THREE.Vector3(star.x, star.y, star.z).add(dir.multiplyScalar(CONFIG.CAMERA_ZOOM_DISTANCE));
-            
-            animateCameraToPosition(camera, controls, targetPos, new THREE.Vector3(star.x, star.y, star.z));
+            selectAndAnimateToStar(star);
           }
+        } else {
+          setSelectedStar(null);
+          setShowPopup(false);
         }
       }
     };
@@ -203,106 +211,89 @@ function App() {
       renderer.dispose();
       lodSystem.cleanup();
     };
-  }, [stars, pathStarIds, pathSequence]);
+  }, [stars, pathStarIds, pathSequence, selectAndAnimateToStar]);
 
-  if (loading) {
-    return (
-      <div className="center-container">
-        <div>Loading stars from backend...</div>
-        <div className="subtext">This may take a moment...</div>
-      </div>
-    );
-  }
 
-  if (error) {
-    return (
-      <div className="center-container error">
-        <div>Error loading stars:</div>
-        <div>{error}</div>
-        <div className="subtext">
-          Make sure backend is running: uvicorn api:app --reload
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (lodSystemRef.current && startingStarId !== null) {
+      lodSystemRef.current.setStartingStar(startingStarId);
+    }
+  }, [startingStarId]);
+
+  useEffect(() => {
+    if (lodSystemRef.current && destinationStarId !== null) {
+      lodSystemRef.current.setDestinationStar(destinationStarId);
+    }
+  }, [destinationStarId]);
+
+  if (loading) return <LoadingScreen />;
+  if (error) return <ErrorScreen error={error} />;
 
   return (
     <>
       <canvas ref={canvasRef} id="space" />
-      <div className="info-box">
-        <div>Total stars: {stars.length.toLocaleString()}</div>
-        <div>Detailed stars: {detailedCount}</div>
-        {pathStarIds && <div>Path stars: {pathStarIds.size}</div>}
-        <div>Selected: {selectedStar ? `${selectedStar.name} (ID: ${selectedStar.id})` : 'None'}</div>
+      
+      <InfoBox
+        totalStars={stars.length}
+        detailedCount={detailedCount}
+        pathCount={pathStarIds?.size}
+        selectedStar={selectedStar}
+        startingStar={startingStar}
+        destinationStar={destinationStar}
+      />
+
+      <div className="logo">
+        <img src="/outer-wilds.png" />
       </div>
+
+      <FuelSlider 
+        min={0}
+        max={100}
+        defaultValue={50}
+        onChange={(value) => setFuelLimit(value)}
+      />
+
+      <div className="direction-input">
+        <div className="algorithm-buttons">
+          <button 
+            className="algorithm-btn"
+            disabled={!startingStar || !destinationStar}
+          >
+            DIJKSTRA
+          </button>
+          <button 
+            className="algorithm-btn"
+            disabled={!startingStar || !destinationStar}
+          >
+            A-STAR
+          </button>
+        </div>
+        <div className="search-row">
+          <input 
+            type="text" 
+            placeholder={searchPlaceholder}
+            className="location-input"
+            value={searchQuery}
+            onChange={handleSearchChange}
+            onKeyDown={handleSearchSubmit}
+          />
+          <button className="random-star-btn" title="Go to random star" onClick={handleRandomStar}>
+            <img src="/random-button.png" alt="Random" />
+          </button>
+        </div>
+      </div>
+
+      {selectedStar && showPopup && popupPosition && (
+        <StarPopup
+          star={selectedStar}
+          position={popupPosition}
+          onSetStart={handleSetStartingStar}
+          onSetDestination={handleSetDestinationStar}
+          onClose={handleClosePopup}
+        />
+      )}
     </>
   );
-}
-
-function setupScene(canvas: HTMLCanvasElement): SceneSetup {
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(
-    CONFIG.CAMERA_FOV,
-    window.innerWidth / window.innerHeight,
-    CONFIG.CAMERA_NEAR,
-    CONFIG.CAMERA_FAR
-  );
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  
-  camera.position.set(
-    CONFIG.CAMERA_START_POSITION.x,
-    CONFIG.CAMERA_START_POSITION.y,
-    CONFIG.CAMERA_START_POSITION.z
-  );
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  
-  const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
-  scene.add(ambientLight);
-  
-  const dirLight = new THREE.DirectionalLight(0x0099ff, 1);
-  dirLight.position.set(0, 1, 0);
-  scene.add(dirLight);
-
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = CONFIG.DAMPING_FACTOR;
-  controls.minDistance = CONFIG.MIN_DISTANCE;
-  controls.maxDistance = CONFIG.MAX_DISTANCE;
-
-  const raycaster = new THREE.Raycaster();
-
-  return { scene, camera, renderer, controls, raycaster };
-}
-
-function easeInOutQuad(t: number): number {
-  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-}
-
-function animateCameraToPosition(
-  camera: THREE.PerspectiveCamera,
-  controls: OrbitControls,
-  targetPosition: THREE.Vector3,
-  lookAtPosition: THREE.Vector3
-) {
-  const startPosition = camera.position.clone();
-  const startTarget = controls.target.clone();
-  const startTime = Date.now();
-  
-  const animate = () => {
-    const elapsed = Date.now() - startTime;
-    const progress = Math.min(elapsed / CONFIG.CAMERA_ANIMATION_DURATION, 1);
-    const eased = easeInOutQuad(progress);
-    
-    camera.position.lerpVectors(startPosition, targetPosition, eased);
-    controls.target.lerpVectors(startTarget, lookAtPosition, eased);
-    
-    if (progress < 1) {
-      requestAnimationFrame(animate);
-    }
-  };
-  
-  animate();
 }
 
 export default App;

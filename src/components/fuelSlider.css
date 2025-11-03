@@ -1,0 +1,125 @@
+.fuel-slider-wrapper {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 100;
+}
+
+.rocket-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.rocket-nose {
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-bottom: 16px solid rgba(231, 76, 60, 0.8);
+  margin-bottom: 2px;
+}
+
+.rocket-body {
+  position: relative;
+  width: 20px;
+  height: 80px;
+  background: rgba(52, 73, 94, 0.3);
+  border: 1px solid rgba(149, 165, 166, 0.5);
+  border-radius: 3px;
+}
+
+.fuel-tank-glass {
+  position: absolute;
+  inset: 2px;
+  background: rgba(20, 30, 40, 0.6);
+  border-radius: 2px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.fuel-liquid {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  transition: background 0.3s;
+  border-radius: 0 0 2px 2px;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.fuel-shine {
+  position: absolute;
+  inset: 0 70% 0 20%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+}
+
+.fuel-thumb {
+  position: absolute;
+  left: -4px;
+  width: 28px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  z-index: 10;
+}
+
+.fuel-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.fuel-thumb:active {
+  cursor: grabbing;
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.thumb-line {
+  width: 1px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.rocket-engine {
+  width: 16px;
+  height: 8px;
+  background: rgba(127, 140, 141, 0.6);
+  border-radius: 0 0 3px 3px;
+  border: 1px solid rgba(149, 165, 166, 0.4);
+  border-top: none;
+  margin-top: 2px;
+}
+
+.fuel-display {
+  margin-top: 6px;
+  text-align: center;
+}
+
+.fuel-value {
+  font-size: 16px;
+  color: white;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  line-height: 1;
+}
+
+.fuel-label {
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: lowercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+  margin-top: 2px;
+}
