@@ -145,14 +145,17 @@ function App() {
     cameraRef.current = camera;
     controlsRef.current = controls;
     
+    const activePathIds = algorithm === 'astar' ? aStarIds : pathStarIds;
+    const activePathSequence = algorithm === 'astar' ? aStarSequence : pathSequence;
+
     const lodSystem = createGalaxy(
       scene, 
       stars, 
       camera, 
-      pathStarIds, 
-      pathSequence,
-      null,
-      null
+      activePathIds,
+      activePathSequence,
+      startingStarId,
+      destinationStarId
     );
     lodSystemRef.current = lodSystem;
 
@@ -234,7 +237,8 @@ function App() {
       renderer.dispose();
       lodSystem.cleanup();
     };
-  }, [stars, pathStarIds, pathSequence, selectAndAnimateToStar]);
+  }, [stars, pathStarIds, pathSequence, aStarIds, aStarSequence, algorithm, selectAndAnimateToStar]);
+
 
   useEffect(() => {
     if (lodSystemRef.current && startingStarId !== null) {
