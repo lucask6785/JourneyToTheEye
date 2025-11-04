@@ -7,6 +7,7 @@ export function useDijkstra() {
   const [pathSequence, setPathSequence] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pathDistance, setPathDistance] = useState<number | null>(null);
 
   const runDijkstra = useCallback(async (startStarId: number, destinationStarId: number, fuel: number) => {
     try {
@@ -33,6 +34,7 @@ export function useDijkstra() {
       
       setPathStarIds(new Set(data.sequence));
       setPathSequence(data.sequence);
+      setPathDistance(data.distance);
     } catch (err) {
       console.error('Pathfinding error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load path');
@@ -41,5 +43,5 @@ export function useDijkstra() {
     }
   }, []);
 
-  return { pathStarIds, pathSequence, loading, error, runDijkstra };
+  return { pathStarIds, pathSequence, loading, error, pathDistance, runDijkstra };
 }

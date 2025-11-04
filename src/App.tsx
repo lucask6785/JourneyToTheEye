@@ -19,7 +19,7 @@ const UI_SELECTORS = '.info-box, .star-popup, .direction-input, .fuel-slider-wra
 
 function App() {
   const { stars, loading, error } = useFetchStars();
-  const { pathStarIds, pathSequence, loading: pathLoading, error: pathError, runDijkstra } = useDijkstra();
+  const { pathStarIds, pathSequence, loading: pathLoading, error: pathError, pathDistance, runDijkstra } = useDijkstra();
   
   const [selectedStar, setSelectedStar] = useState<StarData | null>(null);
   const [startingStar, setStartingStar] = useState<StarData | null>(null);
@@ -28,7 +28,7 @@ function App() {
   const [detailedCount, setDetailedCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchPlaceholder, setSearchPlaceholder] = useState('Search by star ID');
-  const [fuelLimit, setFuelLimit] = useState(50);
+  const [fuelLimit, setFuelLimit] = useState(25);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lodSystemRef = useRef<LODSystem | null>(null);
@@ -226,6 +226,10 @@ function App() {
     }
   }, [destinationStarId]);
 
+  const handleRefresh = () => {
+      window.location.reload();
+  };
+
   if (loading) return <LoadingScreen />;
   if (error) return <ErrorScreen error={error} />;
 
@@ -240,6 +244,7 @@ function App() {
         selectedStar={selectedStar}
         startingStar={startingStar}
         destinationStar={destinationStar}
+        pathDistance={pathDistance}
       />
 
       <div className="logo">
@@ -248,14 +253,14 @@ function App() {
 
       <FuelSlider 
         min={0}
-        max={100}
-        defaultValue={50}
+        max={50}
+        defaultValue={25}
         onChange={(value) => setFuelLimit(value)}
       />
 
       <div className="direction-input">
         <div className="algorithm-buttons">
-          <button 
+          <button
             className="algorithm-btn"
             disabled={!startingStar || !destinationStar || pathLoading}
             onClick={handleFindPath}
@@ -268,6 +273,13 @@ function App() {
           >
             A-STAR
           </button>
+          {pathDistance && <button 
+            className="algorithm-btn"
+            disabled={!startingStar || !destinationStar}
+            onClick={handleRefresh}
+          >
+            RESET
+          </button>}
         </div>
         <div className="search-row">
           <input 
