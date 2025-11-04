@@ -146,26 +146,74 @@ def djikstras(nodes, graph, startStar, goalStar):
 
     return (sequence, dist[goalStar])
 
-def AStar(nodes, graph, startStar, goalStar):
-    gScore = {}
-    fScore = {}
 
-    pass
+def astar(nodes, graph, startStar, goalStar):
+    open_heap = []
+    heapq.heappush(open_heap, (0, startStar))
+    parent = {}
+    sequence = []
+    f_score = []
+    g_score = []
+    parent[startStar] = None
 
-'''
+    for i in range(len(graph)):
+        if i != startStar:
+            f_score.append(math.inf)
+            g_score.append(math.inf)
+        else:
+            f_score.append(distance(nodes, startStar, goalStar)) # f = 0 + distance to goal
+            g_score.append(0) # g is distance of path
+
+    while open_heap:
+        d, u = heapq.heappop(open_heap)
+
+        if u == goalStar:
+            break
+
+        for neighbor in graph[u]:
+            calculated_g = g_score[u] + distance(nodes, u, neighbor)
+            if calculated_g < g_score[neighbor]:
+                parent[neighbor] = u
+                g_score[neighbor] = calculated_g
+                f_score[neighbor] = calculated_g + distance(nodes, neighbor, goalStar)
+                heapq.heappush(open_heap, (f_score[neighbor], neighbor))
+
+    if g_score[goalStar] == math.inf:
+        return ([], -1)
+
+    curr = goalStar
+    while curr != startStar:
+        sequence.insert(0, curr)
+        curr = parent[curr]
+    sequence.insert(0, startStar)
+    return (sequence, g_score[goalStar])
+
+
 start_time = time.perf_counter()
 nodes = load_stars("../../public/stars.csv")
 graph = build_graph(nodes, 50)
 end_time = time.perf_counter()
 elapsed_time = end_time - start_time
 print(f"Elapsed time: {elapsed_time:.4f} seconds")
+
 start_time = time.perf_counter()
 sequence, dist = djikstras(nodes, graph, 0, 1)
 end_time = time.perf_counter()
 elapsed_time = end_time - start_time
-print(f"Elapsed time: {elapsed_time:.4f} seconds")
+print(f"Elapsed time (Dijkstra's): {elapsed_time:.4f} seconds")
 print(dist, sequence)
-for i in sequence:
-    star = nodes[i]
-    print(star.x, star.y, star.z)
-    '''
+
+# for i in sequence:
+#     star = nodes[i]
+#     print(star.x, star.y, star.z)
+
+start_time = time.perf_counter()
+sequence, dist = astar(nodes, graph, 0, 1)
+end_time = time.perf_counter()
+elapsed_time = end_time - start_time
+print(f"Elapsed time (A*): {elapsed_time:.4f} seconds")
+print(dist, sequence)
+
+# for i in sequence:
+#     star = nodes[i]
+#     print(star.x, star.y, star.z)
