@@ -226,6 +226,10 @@ function App() {
     }
   }, [destinationStarId]);
 
+  const handleRefresh = () => {
+      window.location.reload();
+  };
+
   if (loading) return <LoadingScreen />;
   if (error) return <ErrorScreen error={error} />;
 
@@ -269,6 +273,13 @@ function App() {
           >
             A-STAR
           </button>
+          {pathDistance && <button 
+            className="algorithm-btn"
+            disabled={!startingStar || !destinationStar}
+            onClick={handleRefresh}
+          >
+            RESET
+          </button>}
         </div>
         <div className="search-row">
           <input 
