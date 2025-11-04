@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware  # Cross-Origin Resource Sharing for frontend access
-from backend import load_stars, build_kdtree_data, build_graph, get_neighbors, djikstras
+from backend import load_stars, build_kdtree_data, build_graph, get_neighbors, djikstras, astar
 from scipy.spatial import KDTree
 import numpy as np
 
@@ -59,6 +59,18 @@ async def djikstra_call(fuel = 30, start = 0, end = 1):
         "distance": distance
     }
 
+@app.get("/astar")
+async def astar_call(fuel = 30, start = 0, end = 1):
+    graph = build_graph(STAR_NODES, float(fuel))
+    index_sequence, distance = astar(STAR_NODES, graph, int(start), int(end))
+    
+    # Convert array indices to actual star IDs for frontend
+    id_sequence = [STAR_NODES[i].id for i in index_sequence]
+
+    return {
+        "sequence": id_sequence,
+        "distance": distance
+    }
 
 @app.get("/")
 async def root():

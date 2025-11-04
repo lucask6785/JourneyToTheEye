@@ -3,6 +3,7 @@ export const CONFIG = {
   // URL where FastAPI backend serves star data
   BACKEND_URL: 'http://localhost:8000/stars/all',
   DIJKSTRA_URL: 'http://localhost:8000/dijkstra',
+  ASTAR_URL: 'http://localhost:8000/astar',
   
   // Performance
   LOD_UPDATE_INTERVAL: 100, // How often (in milliseconds) to recalculate which stars should be rendered in detail
