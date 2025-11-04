@@ -4,6 +4,7 @@ import { createGalaxy, getStarDataFromIntersection } from './utils/starRenderer'
 import { CONFIG } from './constants';
 import { useFetchStars } from './hooks/useFetchStars';
 import { useDijkstra } from './hooks/useDijkstra';
+import { useAStar } from './hooks/useAstar';
 import { usePopupPosition } from './hooks/usePopupPosition';
 import { setupScene, animateCameraToStar } from './utils/threeHelpers';
 import { StarPopup } from './components/starPopup';
@@ -19,8 +20,25 @@ const UI_SELECTORS = '.info-box, .star-popup, .direction-input, .fuel-slider-wra
 
 function App() {
   const { stars, loading, error } = useFetchStars();
-  const { pathStarIds, pathSequence, loading: pathLoading, error: pathError, runDijkstra } = useDijkstra();
-  
+  const [algorithm, setAlgorithm] = useState<'dijkstra' | 'astar' | null>(null);
+  const {
+    pathStarIds,
+    pathSequence,
+    loading: dijkstraLoading,
+    error: dijkstraError,
+    pathDistance: dijkstraDistance,
+    runDijkstra,
+  } = useDijkstra();
+
+  const {
+    pathStarIds: aStarIds,
+    pathSequence: aStarSequence,
+    loading: aStarLoading,
+    error: aStarError,
+    pathDistance: aStarDistance,
+    runAStar,
+  } = useAStar();
+
   const [selectedStar, setSelectedStar] = useState<StarData | null>(null);
   const [startingStar, setStartingStar] = useState<StarData | null>(null);
   const [destinationStar, setDestinationStar] = useState<StarData | null>(null);
@@ -28,7 +46,7 @@ function App() {
   const [detailedCount, setDetailedCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchPlaceholder, setSearchPlaceholder] = useState('Search by star ID');
-  const [fuelLimit, setFuelLimit] = useState(50);
+  const [fuelLimit, setFuelLimit] = useState(25);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lodSystemRef = useRef<LODSystem | null>(null);
@@ -107,12 +125,17 @@ function App() {
     }
   }, [searchQuery, stars, selectAndAnimateToStar]);
 
-  const handleFindPath = useCallback(() => {
-    if (startingStar && destinationStar) {
-      console.log('Finding path with fuel limit:', fuelLimit, 'parsecs');
+  const handleFindPath = useCallback((selectedAlgorithm: 'dijkstra' | 'astar') => {
+    if (!startingStar || !destinationStar) return;
+
+    console.log(`Running ${selectedAlgorithm} with fuel limit:`, fuelLimit, 'parsecs');
+
+    if (selectedAlgorithm === 'dijkstra') {
       runDijkstra(startingStar.id, destinationStar.id, fuelLimit);
+    } else if (selectedAlgorithm === 'astar') {
+      runAStar(startingStar.id, destinationStar.id, fuelLimit);
     }
-  }, [startingStar, destinationStar, fuelLimit, runDijkstra]);
+  }, [startingStar, destinationStar, fuelLimit, runDijkstra, runAStar]);
 
   // Three.js Scene Setup (runs once when stars load)
   useEffect(() => {
@@ -213,7 +236,6 @@ function App() {
     };
   }, [stars, pathStarIds, pathSequence, selectAndAnimateToStar]);
 
-
   useEffect(() => {
     if (lodSystemRef.current && startingStarId !== null) {
       lodSystemRef.current.setStartingStar(startingStarId);
@@ -226,6 +248,20 @@ function App() {
     }
   }, [destinationStarId]);
 
+  useEffect(() => {
+    if (lodSystemRef.current && aStarIds && aStarSequence.length > 0) {
+      // lodSystemRef.current.setPath(aStarSequence); // blue path
+      const firstStar = stars.find(star => star.id === aStarSequence[0]);
+      if (firstStar) {
+        animateCameraToStar(firstStar, cameraRef.current!, controlsRef.current!);
+      }
+    }
+  }, [aStarIds, aStarSequence, stars]);
+
+  const handleRefresh = () => {
+    window.location.reload();
+  };
+
   if (loading) return <LoadingScreen />;
   if (error) return <ErrorScreen error={error} />;
 
@@ -236,38 +272,57 @@ function App() {
       <InfoBox
         totalStars={stars.length}
         detailedCount={detailedCount}
-        pathCount={pathStarIds?.size}
+        pathCount={pathStarIds?.size || aStarIds?.size}
         selectedStar={selectedStar}
         startingStar={startingStar}
         destinationStar={destinationStar}
+        pathDistance={aStarDistance || dijkstraDistance}
       />
 
       <div className="logo">
-        <img src="/outer-wilds.png" />
+        <img src="/outer-wilds.png" alt="Logo" />
       </div>
 
       <FuelSlider 
         min={0}
-        max={100}
-        defaultValue={50}
+        max={50}
+        defaultValue={25}
         onChange={(value) => setFuelLimit(value)}
       />
 
       <div className="direction-input">
         <div className="algorithm-buttons">
-          <button 
-            className="algorithm-btn"
-            disabled={!startingStar || !destinationStar || pathLoading}
-            onClick={handleFindPath}
+          <button
+            className={`algorithm-btn ${algorithm === 'dijkstra' ? 'active' : ''}`}
+            disabled={!startingStar || !destinationStar || dijkstraLoading || aStarLoading}
+            onClick={() => {
+              setAlgorithm('dijkstra');
+              handleFindPath('dijkstra');
+            }}
           >
-            {pathLoading ? 'Finding Path...' : 'DIJKSTRAS'}
+            {(dijkstraLoading && algorithm === 'dijkstra') ? 'Finding Path...' : 'DIJKSTRA'}
           </button>
-          <button 
-            className="algorithm-btn"
-            disabled={!startingStar || !destinationStar}
+
+          <button
+            className={`algorithm-btn ${algorithm === 'astar' ? 'active' : ''}`}
+            disabled={!startingStar || !destinationStar || dijkstraLoading || aStarLoading}
+            onClick={() => {
+              setAlgorithm('astar');
+              handleFindPath('astar');
+            }}
           >
-            A-STAR
+            {(aStarLoading && algorithm === 'astar') ? 'Finding Path...' : 'A - STAR'}
           </button>
+
+          {(dijkstraDistance || aStarDistance) && (
+            <button 
+              className="algorithm-btn"
+              disabled={!startingStar || !destinationStar}
+              onClick={handleRefresh}
+            >
+              RESET
+            </button>
+          )}
         </div>
         <div className="search-row">
           <input 
