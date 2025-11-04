@@ -25,7 +25,6 @@ function App() {
     pathStarIds,
     pathSequence,
     loading: dijkstraLoading,
-    error: dijkstraError,
     pathDistance: dijkstraDistance,
     runDijkstra,
   } = useDijkstra();
@@ -34,7 +33,6 @@ function App() {
     pathStarIds: aStarIds,
     pathSequence: aStarSequence,
     loading: aStarLoading,
-    error: aStarError,
     pathDistance: aStarDistance,
     runAStar,
   } = useAStar();
