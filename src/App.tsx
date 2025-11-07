@@ -45,7 +45,41 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchPlaceholder, setSearchPlaceholder] = useState('Search by star ID');
   const [fuelLimit, setFuelLimit] = useState(25);
-  
+
+  const [dijkstraTime, setDijkstraTime] = useState<number | null>(null);
+  const [aStarTime, setAStarTime] = useState<number | null>(null);
+  const dijkstraTimerRef = useRef<number | null>(null);
+  const aStarTimerRef = useRef<number | null>(null);
+
+  const [isDijkstraComputing, setIsDijkstraComputing] = useState(false);
+  const [isAStarComputing, setIsAStarComputing] = useState(false);
+
+  const startTimer = (algorithm: 'dijkstra' | 'astar') => {
+  const startTime = performance.now();
+
+  const updateTimer = () => {
+    const elapsed = performance.now() - startTime;
+    if (algorithm === 'dijkstra') setDijkstraTime(elapsed);
+    else setAStarTime(elapsed);
+  };
+
+  const timer = window.setInterval(updateTimer, 100); // update every 100ms
+  if (algorithm === 'dijkstra') dijkstraTimerRef.current = timer;
+  else aStarTimerRef.current = timer;
+};
+
+const stopTimer = (algorithm: 'dijkstra' | 'astar') => {
+  if (algorithm === 'dijkstra' && dijkstraTimerRef.current !== null) {
+    clearInterval(dijkstraTimerRef.current);
+    dijkstraTimerRef.current = null;
+    setIsDijkstraComputing(false);
+  } else if (algorithm === 'astar' && aStarTimerRef.current !== null) {
+    clearInterval(aStarTimerRef.current);
+    aStarTimerRef.current = null;
+    setIsAStarComputing(false);
+  }
+};
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lodSystemRef = useRef<LODSystem | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -129,8 +163,14 @@ function App() {
     console.log(`Running ${selectedAlgorithm} with fuel limit:`, fuelLimit, 'parsecs');
 
     if (selectedAlgorithm === 'dijkstra') {
+      setIsDijkstraComputing(true);
+      setDijkstraTime(0);
+      startTimer('dijkstra');
       runDijkstra(startingStar.id, destinationStar.id, fuelLimit);
     } else if (selectedAlgorithm === 'astar') {
+      setIsAStarComputing(true);
+      setAStarTime(0);
+      startTimer('astar');
       runAStar(startingStar.id, destinationStar.id, fuelLimit);
     }
   }, [startingStar, destinationStar, fuelLimit, runDijkstra, runAStar]);
@@ -260,6 +300,14 @@ function App() {
     }
   }, [aStarIds, aStarSequence, stars]);
 
+  useEffect(() => {
+    if (!dijkstraLoading) stopTimer('dijkstra');
+  }, [dijkstraLoading]);
+
+  useEffect(() => {
+    if (!aStarLoading) stopTimer('astar');
+  }, [aStarLoading]);
+
   const handleRefresh = () => {
     window.location.reload();
   };
@@ -279,6 +327,10 @@ function App() {
         startingStar={startingStar}
         destinationStar={destinationStar}
         pathDistance={aStarDistance || dijkstraDistance}
+        dijkstraTime={dijkstraTime}
+        astarTime={aStarTime}
+        isDijkstraComputing={isDijkstraComputing}
+        isAstarComputing={isAStarComputing}
       />
 
       <div className="logo">
