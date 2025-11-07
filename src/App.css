@@ -1,3 +1,8 @@
+@font-face {
+  font-family: 'SF-Fourche';
+  src: url('/public/SFFourche.ttf') format('truetype');
+}
+
 body {
   margin: 0;
   overflow: hidden;
@@ -17,7 +22,7 @@ body {
   transform: translate(-50%, -50%);
   color: white;
   font-size: 24px;
-  font-family: Arial, sans-serif;
+  font-family: monospace, Arial, sans-serif;
   text-align: center;
 }
 
@@ -36,7 +41,7 @@ body {
   top: 10px;
   left: 10px;
   color: white;
-  font-family: Arial, sans-serif;
+  font-family: monospace, Arial, sans-serif;
   font-size: 14px;
   background: rgba(0, 0, 0, 0.5);
   padding: 10px;
@@ -44,7 +49,15 @@ body {
 }
 
 .info-item {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+}
+
+.dijkstra-time {
+  color: #4a90e2
+}
+
+.astar-time {
+  color: #ff000d
 }
 
 .direction-input {
@@ -76,7 +89,7 @@ body {
   outline: none;
   background: rgba(0, 0, 0, 0.8);
   color: white;
-  font-family: Arial, sans-serif;
+  font-family: SF-Fourche, Arial, sans-serif;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -110,7 +123,7 @@ body {
   outline: none;
   background: rgba(0, 0, 0, 0.8);
   color: white;
-  font-family: Arial, sans-serif;
+  font-family: monospace, Arial, sans-serif;
 }
 
 .location-input:focus {
@@ -176,6 +189,7 @@ body {
   margin-bottom: 12px;
   display: flex;
   flex-direction: column;
+  font-family: 'SF-Fourche', Arial;
   gap: 6px;
 }
 
@@ -194,7 +208,7 @@ body {
 .info-value {
   color: white;
   font-size: 11px;
-  font-family: 'Courier New', monospace;
+  font-family: monospace, 'Courier New', monospace;
 }
 
 .star-popup-actions {
@@ -209,6 +223,7 @@ body {
   border: 1px solid white;
   border-radius: 20px;
   color: white;
+  font-family: monospace, 'SF-Fourche';
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;

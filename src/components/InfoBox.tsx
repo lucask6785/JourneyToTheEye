@@ -56,8 +56,8 @@ export function InfoBox({
       <div className="info-item">Starting Star: {formatStar(startingStar)}</div>
       <div className="info-item">Destination Star: {formatStar(destinationStar)}</div>
       <div className="info-item">Total distance: {formatDistance(pathDistance)}</div>
-      {dijkstraTime !== undefined && <div className="info-item">Dijkstra time: {formatTime(dijkstraTime, isDijkstraComputing)}</div>}
-      {astarTime !== undefined && <div className="info-item">A* time: {formatTime(astarTime, isAstarComputing)}</div>}
+      {dijkstraTime !== undefined && <div className="info-item dijkstra-time">Dijkstra time: {formatTime(dijkstraTime, isDijkstraComputing)}</div>}
+      {astarTime !== undefined && <div className="info-item astar-time">A-Star time: {formatTime(astarTime, isAstarComputing)}</div>}
     </div>
   );
 }

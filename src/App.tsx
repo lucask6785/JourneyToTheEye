@@ -365,7 +365,7 @@ const stopTimer = (algorithm: 'dijkstra' | 'astar') => {
               handleFindPath('astar');
             }}
           >
-            {(aStarLoading && algorithm === 'astar') ? 'Finding Path...' : 'A - STAR'}
+            {(aStarLoading && algorithm === 'astar') ? 'Finding Path...' : 'A-STAR'}
           </button>
 
           {(dijkstraDistance || aStarDistance) && (
