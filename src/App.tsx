@@ -8,6 +8,8 @@ import { useAStar } from './hooks/useAstar';
 import { usePopupPosition } from './hooks/usePopupPosition';
 import { setupScene, animateCameraToStar } from './utils/threeHelpers';
 import { StarPopup } from './components/starPopup';
+import { AboutPage } from './components/AboutPage';
+import { DeveloperBlock } from './components/DeveloperBlock';
 import { InfoBox } from './components/InfoBox';
 import { LoadingScreen } from './components/LoadingScreen';
 import { ErrorScreen } from './components/ErrorScreen';
@@ -16,7 +18,7 @@ import { FuelSlider } from './components/FuelSlider';
 import type { StarData, LODSystem } from './types';
 import './App.css';
 
-const UI_SELECTORS = '.info-box, .star-popup, .direction-input, .fuel-slider-wrapper';
+const UI_SELECTORS = '.info-box, .star-popup, .direction-input, .fuel-slider-wrapper, .about-main, .dev-block-individual';
 
 function App() {
   const { stars, loading, error } = useFetchStars();
@@ -41,6 +43,7 @@ function App() {
   const [startingStar, setStartingStar] = useState<StarData | null>(null);
   const [destinationStar, setDestinationStar] = useState<StarData | null>(null);
   const [showPopup, setShowPopup] = useState(false);
+  const [showAboutPage, setShowAboutPage] = useState(false);
   const [detailedCount, setDetailedCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchPlaceholder, setSearchPlaceholder] = useState('Search by star ID');
@@ -87,17 +90,51 @@ const stopTimer = (algorithm: 'dijkstra' | 'astar') => {
 
   const startingStarId = startingStar?.id ?? null;
   const destinationStarId = destinationStar?.id ?? null;
-  const popupPosition = usePopupPosition(selectedStar, showPopup, cameraRef.current);
+  const popupPosition = usePopupPosition(selectedStar, showPopup || showAboutPage, cameraRef.current);
+
+  // Calculate developer block positions based on the star position
+  const getDeveloperBlockPositions = () => {
+    if (!popupPosition || !showAboutPage) return [null, null, null];
+    
+    const DEV_BLOCK_WIDTH = 220;
+    const DEV_BLOCK_HEIGHT = 140;
+    const DEV_BLOCK_OFFSET = 180;
+    const VERTICAL_SPACING = 200;
+    const CONNECTION_OFFSET = 35;
+    
+    const starX = popupPosition.starScreenPos.x;
+    const starY = popupPosition.starScreenPos.y;
+    
+    return [0, 1, 2].map(i => {
+      const blockX = starX - DEV_BLOCK_OFFSET - DEV_BLOCK_WIDTH;
+      const centerY = starY - DEV_BLOCK_HEIGHT / 2;
+      const blockY = centerY + (i - 1) * VERTICAL_SPACING;
+      
+      return {
+        x: blockX,
+        y: blockY,
+        starScreenPos: popupPosition.starScreenPos,
+        connectionPoint: { x: blockX + DEV_BLOCK_WIDTH + CONNECTION_OFFSET, y: blockY + DEV_BLOCK_HEIGHT / 2 }
+      };
+    });
+  };
+
+  const [devPos1, devPos2, devPos3] = getDeveloperBlockPositions();
 
   const selectAndAnimateToStar = useCallback((star: StarData) => {
     console.log('Selected:', star.name, 'ID:', star.id);
     setSelectedStar(star);
     setShowPopup(false);
+    setShowAboutPage(false);
     lodSystemRef.current?.selectStar(star.id);
     
     if (cameraRef.current && controlsRef.current) {
       animateCameraToStar(star, cameraRef.current, controlsRef.current, () => {
-        setShowPopup(true);
+        if (star.id === -1) {
+          setShowAboutPage(true);
+        } else {
+          setShowPopup(true);
+        }
       });
     }
   }, []);
@@ -126,6 +163,7 @@ const stopTimer = (algorithm: 'dijkstra' | 'astar') => {
   const handleClosePopup = useCallback(() => {
     setSelectedStar(null);
     setShowPopup(false);
+    setShowAboutPage(false);
     lodSystemRef.current?.selectStar(null);
   }, []);
 
@@ -399,6 +437,49 @@ const stopTimer = (algorithm: 'dijkstra' | 'astar') => {
           position={popupPosition}
           onSetStart={handleSetStartingStar}
           onSetDestination={handleSetDestinationStar}
+          onClose={handleClosePopup}
+        />
+      )}
+
+      {selectedStar && showAboutPage && popupPosition && (
+        <AboutPage
+          position={popupPosition}
+          onClose={handleClosePopup}
+        />
+      )}
+
+      {selectedStar && showAboutPage && devPos1 && (
+        <DeveloperBlock
+          position={devPos1}
+          developerName="Jordan Kusuda"
+          year="Sophomore"
+          major="Computer Science"
+          linkedinUrl="https://www.linkedin.com/in/jordankusuda/"
+          imageUrl="/jordankphoto.jpg"
+          onClose={handleClosePopup}
+        />
+      )}
+
+      {selectedStar && showAboutPage && devPos2 && (
+        <DeveloperBlock
+          position={devPos2}
+          developerName="Lucas Kilday"
+          year="Sophomore"
+          major="Computer Science"
+          linkedinUrl="https://www.linkedin.com/in/lucas-kilday/"
+          imageUrl="/lucaskphoto.jpg"
+          onClose={handleClosePopup}
+        />
+      )}
+
+      {selectedStar && showAboutPage && devPos3 && (
+        <DeveloperBlock
+          position={devPos3}
+          developerName="Carlos D Jusino"
+          year="Sophomore"
+          major="Computer Science & Statistics"
+          linkedinUrl="https://www.linkedin.com/in/carlosdjusino/"
+          imageUrl="/carlosjphoto.jpg"
           onClose={handleClosePopup}
         />
       )}

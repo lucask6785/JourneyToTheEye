@@ -22,7 +22,7 @@ body {
   transform: translate(-50%, -50%);
   color: white;
   font-size: 24px;
-  font-family: monospace, Arial, sans-serif;
+  font-family: SF-Fourche, monospace, Arial, sans-serif;
   text-align: center;
 }
 
@@ -41,7 +41,7 @@ body {
   top: 10px;
   left: 10px;
   color: white;
-  font-family: monospace, Arial, sans-serif;
+  font-family: SF-Fourche, monospace, Arial, sans-serif;
   font-size: 14px;
   background: rgba(0, 0, 0, 0.5);
   padding: 10px;
@@ -123,7 +123,7 @@ body {
   outline: none;
   background: rgba(0, 0, 0, 0.8);
   color: white;
-  font-family: monospace, Arial, sans-serif;
+  font-family: SF-Fourche, monospace, Arial, sans-serif;
 }
 
 .location-input:focus {
@@ -208,7 +208,7 @@ body {
 .info-value {
   color: white;
   font-size: 11px;
-  font-family: monospace, 'Courier New', monospace;
+  font-family: SF-Fourche, monospace, 'Courier New', monospace;
 }
 
 .star-popup-actions {
@@ -223,7 +223,7 @@ body {
   border: 1px solid white;
   border-radius: 20px;
   color: white;
-  font-family: monospace, 'SF-Fourche';
+  font-family: SF-Fourche, monospace;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;

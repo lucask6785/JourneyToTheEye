@@ -34,7 +34,7 @@ export interface PopupPosition {
   x: number;
   y: number;
   starScreenPos: { x: number; y: number };
-  connectionPoint?: { x: number; y: number };
+  connectionPoint: { x: number; y: number };
 }
 
 export interface SceneSetup {
