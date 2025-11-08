@@ -14,6 +14,7 @@ import { InfoBox } from './components/InfoBox';
 import { LoadingScreen } from './components/LoadingScreen';
 import { ErrorScreen } from './components/ErrorScreen';
 import { FuelSlider } from './components/FuelSlider';
+import SoundToggle from './components/SoundToggle';
 
 import type { StarData, LODSystem } from './types';
 import './App.css';
@@ -66,7 +67,7 @@ function App() {
     else setAStarTime(elapsed);
   };
 
-  const timer = window.setInterval(updateTimer, 100); // update every 100ms
+  const timer = window.setInterval(updateTimer, 10); // update every 10ms
   if (algorithm === 'dijkstra') dijkstraTimerRef.current = timer;
   else aStarTimerRef.current = timer;
 };
@@ -346,6 +347,16 @@ const stopTimer = (algorithm: 'dijkstra' | 'astar') => {
   }, [aStarIds, aStarSequence, stars]);
 
   useEffect(() => {
+    if (lodSystemRef.current && pathStarIds && pathSequence.length > 0) {
+      // lodSystemRef.current.setPath(aStarSequence); // blue path
+      const firstStar = stars.find(star => star.id === pathSequence[0]);
+      if (firstStar) {
+        animateCameraToStar(firstStar, cameraRef.current!, controlsRef.current!);
+      }
+    }
+  }, [pathStarIds, pathSequence, stars]);
+
+  useEffect(() => {
     if (!dijkstraLoading) stopTimer('dijkstra');
   }, [dijkstraLoading]);
 
@@ -397,6 +408,7 @@ const stopTimer = (algorithm: 'dijkstra' | 'astar') => {
         defaultValue={25}
         onChange={(value) => setFuelLimit(value)}
       />
+      <SoundToggle />
 
       <div className="direction-input">
         <div className="algorithm-buttons">
