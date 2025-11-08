@@ -373,6 +373,15 @@ const stopTimer = (algorithm: 'dijkstra' | 'astar') => {
 
       <div className="logo">
         <img src="/outer-wilds.png" alt="Logo" />
+        <button 
+          className="about-btn" 
+          onClick={() => {
+            const aboutStar = stars.find(star => star.id === -1);
+            if (aboutStar) selectAndAnimateToStar(aboutStar);
+          }}
+        >
+          About
+        </button>
       </div>
 
       <FuelSlider 
