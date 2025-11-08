@@ -167,6 +167,13 @@ const stopTimer = (algorithm: 'dijkstra' | 'astar') => {
     lodSystemRef.current?.selectStar(null);
   }, []);
 
+  const handleCloseAboutPage = useCallback(() => {
+    const star0 = stars.find(star => star.id === 0);
+    if (star0) {
+      selectAndAnimateToStar(star0);
+    }
+  }, [stars, selectAndAnimateToStar]);
+
   const handleRandomStar = useCallback(() => {
     if (stars.length === 0) return;
     
@@ -440,7 +447,7 @@ const stopTimer = (algorithm: 'dijkstra' | 'astar') => {
         </div>
       </div>
 
-      {selectedStar && showPopup && popupPosition && (
+      {selectedStar && showPopup && !showAboutPage && popupPosition && (
         <StarPopup
           star={selectedStar}
           position={popupPosition}
@@ -453,7 +460,7 @@ const stopTimer = (algorithm: 'dijkstra' | 'astar') => {
       {selectedStar && showAboutPage && popupPosition && (
         <AboutPage
           position={popupPosition}
-          onClose={handleClosePopup}
+          onClose={handleCloseAboutPage}
         />
       )}
 
