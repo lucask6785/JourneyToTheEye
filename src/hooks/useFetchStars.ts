@@ -15,10 +15,10 @@ export function useFetchStars() {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        const response_json = await response.json();
-        const data: BackendResponse = response_json.data;
-
+        const responseJson = await response.json();
+        const data: BackendResponse = responseJson.data;
         const transformedStars: StarData[] = data.positions.map((pos, index) => ({
+
           id: data.metadata[index].id,
           x: pos[0],
           y: pos[1],
