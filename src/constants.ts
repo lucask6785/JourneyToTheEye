@@ -1,9 +1,9 @@
 // config values
 export const CONFIG = {
   // URL where FastAPI backend serves star data
-  BACKEND_URL: 'http://localhost:8000/stars/all',
-  DIJKSTRA_URL: 'http://localhost:8000/dijkstra',
-  ASTAR_URL: 'http://localhost:8000/astar',
+  BACKEND_URL: 'https://dsa-project-backend-tdhf.vercel.app/api/stars',
+  DIJKSTRA_URL: 'https://dsa-project-backend-tdhf.vercel.app/api/dijkstra',
+  ASTAR_URL: 'https://dsa-project-backend-tdhf.vercel.app/api/astar',
   
   // Performance
   LOD_UPDATE_INTERVAL: 100, // How often (in milliseconds) to recalculate which stars should be rendered in detail
