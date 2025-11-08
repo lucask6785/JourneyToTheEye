@@ -1,7 +1,7 @@
 // config values
 export const CONFIG = {
   // URL where FastAPI backend serves star data
-  BACKEND_URL: 'https://dsa-project-backend-tdhf.vercel.app/api/stars',
+  BACKEND_URL: 'https://dsa-project-backend-tdhf.vercel.app/api/stars/all',
   DIJKSTRA_URL: 'https://dsa-project-backend-tdhf.vercel.app/api/dijkstra',
   ASTAR_URL: 'https://dsa-project-backend-tdhf.vercel.app/api/astar',
   
